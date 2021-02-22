@@ -433,7 +433,7 @@ proptest! {
     #[test]
     fn test_smt_update_with_zero_values((pairs, _n) in leaves(5, 30)){
         let mut rng = rand::thread_rng();
-        let len =  rng.gen_range(0, pairs.len());
+        let len =  rng.gen_range(0..pairs.len());
         let mut smt = new_smt(pairs[..len].to_vec());
         let root = *smt.root();
 
