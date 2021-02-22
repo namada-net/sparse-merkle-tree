@@ -17,6 +17,7 @@ blake2b = ["blake2b-rs"]
 [dependencies]
 cfg-if = "0.1"
 blake2b-rs = { version = "0.1", optional = true }
+pretty-bytes = "0.2.2"
 
 [dev-dependencies]
 proptest = "0.9"

@@ -8,8 +8,8 @@ use crate::{
 
 #[derive(Debug, Clone, Default)]
 pub struct DefaultStore<V> {
-    branches_map: Map<H256, BranchNode>,
-    leaves_map: Map<H256, LeafNode<V>>,
+    pub branches_map: Map<H256, BranchNode>,
+    pub leaves_map: Map<H256, LeafNode<V>>,
 }
 
 impl<V> DefaultStore<V> {

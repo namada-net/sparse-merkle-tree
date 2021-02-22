@@ -1,10 +1,16 @@
 #[macro_use]
 extern crate criterion;
 
+use pretty_bytes::converter::convert;
+use std::mem::size_of;
+
 use criterion::Criterion;
 use rand::{thread_rng, Rng};
 use sparse_merkle_tree::{
-    blake2b::Blake2bHasher, default_store::DefaultStore, tree::SparseMerkleTree, H256,
+    blake2b::Blake2bHasher,
+    default_store::DefaultStore,
+    tree::{BranchNode, LeafNode, SparseMerkleTree},
+    H256,
 };
 
 const TARGET_LEAVES_COUNT: usize = 20;
@@ -20,10 +26,24 @@ fn random_h256(rng: &mut impl Rng) -> H256 {
 fn random_smt(update_count: usize, rng: &mut impl Rng) -> (SMT, Vec<H256>) {
     let mut smt = SparseMerkleTree::default();
     let mut keys = Vec::with_capacity(update_count);
-    for _ in 0..update_count {
+    for i in 0..update_count {
         let key = random_h256(rng);
         let value = random_h256(rng);
         smt.update(key, value).unwrap();
+        let store: &DefaultStore<H256> = smt.store();
+        let b_size = size_of::<H256>() * store.branches_map.len()
+            + size_of::<BranchNode>() * store.branches_map.len();
+        let l_size = size_of::<H256>() * store.leaves_map.len()
+            + size_of::<LeafNode<H256>>() * store.leaves_map.len();
+        println!(
+            "SMT {} size {}, (branches {}, leaves {}), ({} branches, {} leaves)",
+            i,
+            convert((b_size + l_size) as f64),
+            convert(b_size as f64),
+            convert(l_size as f64),
+            store.branches_map.len(),
+            store.leaves_map.len()
+        );
         keys.push(key);
     }
     (smt, keys)
