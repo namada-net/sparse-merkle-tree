@@ -1,7 +1,10 @@
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use core::cmp::Ordering;
 
 /// Represent 256 bits
 #[derive(Eq, PartialEq, Debug, Default, Hash, Clone, Copy)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct H256([u8; 32]);
 
 const ZERO: H256 = H256([0u8; 32]);
@@ -43,7 +46,8 @@ impl H256 {
     }
 
     /// Treat H256 as a path in a tree
-    /// fork height is the number of common bits(from heigher to lower: 255..=0) of two H256
+    /// fork height is the number of common bits(from heigher to lower: 255..=0)
+    /// of two H256
     pub fn fork_height(&self, key: &H256) -> u8 {
         for h in (0..=core::u8::MAX).rev() {
             if self.get_bit(h) != key.get_bit(h) {

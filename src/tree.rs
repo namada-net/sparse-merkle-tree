@@ -7,10 +7,13 @@ use crate::{
     vec::Vec,
     EXPECTED_PATH_SIZE, H256, TREE_HEIGHT,
 };
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use core::{cmp::max, marker::PhantomData};
 
 /// A branch in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct BranchNode {
     pub fork_height: u8,
     pub key: H256,
@@ -31,6 +34,7 @@ impl BranchNode {
 
 /// A leaf in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct LeafNode<V> {
     pub key: H256,
     pub value: V,
@@ -91,12 +95,14 @@ impl<H: Hasher + Default, V: Value, S: Store<V>> SparseMerkleTree<H, V, S> {
             .as_ref()
             .map(|b| max(b.key.fork_height(&key), b.fork_height))
             .unwrap_or(0);
-        // branch.is_none() represents the descendants are zeros, so we can stop the loop
+        // branch.is_none() represents the descendants are zeros, so we can stop the
+        // loop
         while branch.is_some() {
             let branch_node = branch.unwrap();
             let fork_height = max(key.fork_height(&branch_node.key), branch_node.fork_height);
             if height > branch_node.fork_height {
-                // the merge height is higher than node, so we do not need to remove node's branch
+                // the merge height is higher than node, so we do not need to remove node's
+                // branch
                 path.insert(fork_height, node);
                 break;
             }

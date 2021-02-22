@@ -1,29 +1,33 @@
 [package]
-name = "sparse-merkle-tree"
-version = "0.3.1-pre"
 authors = ["jjy <jjyruby@gmail.com>"]
+description = "Sparse merkle tree implement in rust"
 edition = "2018"
 license = "MIT"
+name = "sparse-merkle-tree"
 repository = "https://github.com/jjyr/sparse-merkle-tree"
-description = "Sparse merkle tree implement in rust"
+version = "0.3.1-pre"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+blake2b = ["blake2b-rs"]
 default = ["std", "blake2b"]
 std = []
-blake2b = ["blake2b-rs"]
+# binary encoding with https://crates.io/crates/borsh
+# TODO The name is different to avoid self-reference. This could be `borsh = ["dep:borsh"]`, but that requires nightly `namespaced-features`
+with_borsh = ["borsh"]
 
 [dependencies]
+blake2b-rs = {version = "0.1", optional = true}
+borsh = {version = "0.8.1", optional = true}
 cfg-if = "0.1"
-blake2b-rs = { version = "0.1", optional = true }
 
 [dev-dependencies]
-proptest = "0.9"
 criterion = "0.2"
-rand = "0.7"
 hex = "0.4"
+proptest = "0.9"
+rand = "0.7"
 
 [[bench]]
-name = "smt_benchmark"
 harness = false
+name = "smt_benchmark"
