@@ -1,10 +1,10 @@
-#[cfg(feature = "with_borsh")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::cmp::Ordering;
 
 /// Represent 256 bits
 #[derive(Eq, PartialEq, Debug, Default, Hash, Clone, Copy)]
-#[cfg_attr(feature = "with_borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct H256([u8; 32]);
 
 const ZERO: H256 = H256([0u8; 32]);
