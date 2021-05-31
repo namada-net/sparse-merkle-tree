@@ -5,11 +5,11 @@ use crate::{
     tree::{BranchNode, LeafNode},
     H256,
 };
-#[cfg(feature = "with_borsh")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "with_borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct DefaultStore<V> {
     branches_map: Map<H256, BranchNode>,
     leaves_map: Map<H256, LeafNode<V>>,

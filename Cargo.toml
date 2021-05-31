@@ -13,9 +13,6 @@ version = "0.3.1-pre"
 blake2b = ["blake2b-rs"]
 default = ["std", "blake2b"]
 std = []
-# binary encoding with https://crates.io/crates/borsh
-# TODO The name is different to avoid self-reference. This could be `borsh = ["dep:borsh"]`, but that requires nightly `namespaced-features`
-with_borsh = ["borsh"]
 
 [dependencies]
 blake2b-rs = {version = "0.2.0", optional = true}

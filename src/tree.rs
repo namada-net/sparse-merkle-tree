@@ -7,13 +7,13 @@ use crate::{
     vec::Vec,
     EXPECTED_PATH_SIZE, H256, TREE_HEIGHT,
 };
-#[cfg(feature = "with_borsh")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::{cmp::max, marker::PhantomData};
 
 /// A branch in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "with_borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct BranchNode {
     pub fork_height: u8,
     pub key: H256,
@@ -34,7 +34,7 @@ impl BranchNode {
 
 /// A leaf in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "with_borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct LeafNode<V> {
     pub key: H256,
     pub value: V,
