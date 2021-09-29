@@ -10,7 +10,7 @@ pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Existence
         .clone()
         .into();
     let mut proof: VecDeque<_> = proof.into();
-    let mut cur_key = key.clone();
+    let mut cur_key = *key;
     let mut height = 0;
     let mut path = Vec::new();
     while !proof.is_empty() {
