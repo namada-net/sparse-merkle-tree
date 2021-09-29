@@ -1,12 +1,13 @@
 use super::*;
 use crate::{
-    blake2b::Blake2bHasher, default_store::DefaultStore, error::Error, MerkleProof,
-    SparseMerkleTree,
+    blake2b::Blake2bHasher, default_store::DefaultStore, error::Error, sha256::Sha256Hasher,
+    MerkleProof, SparseMerkleTree,
 };
 use proptest::prelude::*;
 use rand::prelude::{Rng, SliceRandom};
 
 type SMT = SparseMerkleTree<Blake2bHasher, H256, DefaultStore<H256>>;
+type ShaSmt = SparseMerkleTree<Sha256Hasher, H256, DefaultStore<H256>>;
 
 #[test]
 fn test_default_root() {
@@ -255,6 +256,14 @@ fn new_smt(pairs: Vec<(H256, H256)>) -> SMT {
     smt
 }
 
+fn new_sha_smt(pairs: Vec<(H256, H256)>) -> ShaSmt {
+    let mut smt = ShaSmt::default();
+    for (key, value) in pairs {
+        smt.update(key, value).unwrap();
+    }
+    smt
+}
+
 fn leaves(
     min_leaves: usize,
     max_leaves: usize,
@@ -448,6 +457,30 @@ proptest! {
         for (k, v) in pairs[..len].iter() {
             let value = smt.get(k).unwrap();
             assert_eq!(v, &value);
+        }
+    }
+
+    #[test]
+    fn test_ics23_proof_single_leaf_small((pairs, _n) in leaves(1, 50)){
+        let smt = new_sha_smt(pairs.clone());
+        let spec = proof_ics23::get_spec();
+        let root = smt.root().as_slice().to_vec();
+        for (k, v) in pairs {
+            let proof = smt.membership_proof(&k).expect("gen proof");
+            assert!(ics23::verify_membership(&proof, &spec, &root, &k.as_slice(), &v.as_slice()));
+        }
+    }
+
+    #[test]
+    fn test_ics23_proof_non_exists_leaves((pairs, _n) in leaves(1, 20), (pairs2, _n2) in leaves(1, 5)) {
+        let smt = new_sha_smt(pairs.clone());
+        let spec = proof_ics23::get_spec();
+        let root = smt.root().as_slice().to_vec();
+        let exists_key: Vec<_> = pairs.into_iter().map(|(k, _v)|k).collect();
+        let non_exists_keys: Vec<_> = pairs2.into_iter().map(|(k, _v)|k).filter(|k| !exists_key.contains(&k)).collect();
+        for k in non_exists_keys {
+            let proof = smt.non_membership_proof(&k).expect("gen proof");
+            assert!(ics23::verify_non_membership(&proof, &spec, &root, &k.as_slice()));
         }
     }
 }

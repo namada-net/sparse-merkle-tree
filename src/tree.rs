@@ -3,6 +3,7 @@ use crate::{
     error::{Error, Result},
     merge::{hash_leaf, merge},
     merkle_proof::MerkleProof,
+    proof_ics23,
     traits::{Hasher, Store, Value},
     vec::Vec,
     EXPECTED_PATH_SIZE, H256, TREE_HEIGHT,
@@ -10,6 +11,8 @@ use crate::{
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::{cmp::max, marker::PhantomData};
+use ics23::commitment_proof::Proof;
+use ics23::{CommitmentProof, NonExistenceProof};
 
 /// A branch in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -48,7 +51,7 @@ pub struct SparseMerkleTree<H, V, S> {
     phantom: PhantomData<(H, V)>,
 }
 
-impl<H: Hasher + Default, V: Value, S: Store<V>> SparseMerkleTree<H, V, S> {
+impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMerkleTree<H, V, S> {
     /// Build a merkle tree from root and store
     pub fn new(root: H256, store: S) -> SparseMerkleTree<H, V, S> {
         SparseMerkleTree {
@@ -384,5 +387,93 @@ impl<H: Hasher + Default, V: Value, S: Store<V>> SparseMerkleTree<H, V, S> {
         }
         debug_assert_eq!(leaves_path.len(), keys_len);
         Ok(MerkleProof::new(leaves_path, proof))
+    }
+
+    /// Generate merkle proof for ICS 23
+    pub fn membership_proof(&self, key: &H256) -> Result<CommitmentProof> {
+        let value = self.get(key)?;
+        if value == V::zero() {
+            return Err(Error::ExistenceProof);
+        }
+        let merkle_proof = self.merkle_proof(vec![key.clone()])?;
+        let existence_proof = proof_ics23::convert(merkle_proof, key, &value.to_h256());
+        Ok(CommitmentProof {
+            proof: Some(Proof::Exist(existence_proof)),
+        })
+    }
+
+    pub fn non_membership_proof(&self, key: &H256) -> Result<CommitmentProof> {
+        let value = self.get(key)?;
+        if value != V::zero() {
+            return Err(Error::NonExistenceProof);
+        }
+
+        // fetch all merkle path
+        let mut cache: BTreeMap<(usize, H256), H256> = Default::default();
+        self.fetch_merkle_path(key, &mut cache)?;
+        let mut left = None;
+        let mut right = None;
+        for (_, node) in cache.iter() {
+            let branch = self
+                .store
+                .get_branch(node)?
+                .expect("the forked branch should exist");
+            let fork_height = key.fork_height(&branch.key);
+            let is_right = key.get_bit(fork_height);
+            if is_right && left.is_none() {
+                // get the left which is the most right in the left subtree
+                let mut n = node.clone();
+                while let Some(branch) = self.store.get_branch(&n)? {
+                    if branch.fork_height == 0 {
+                        break;
+                    }
+                    let (left_node, right_node) = branch.branch(branch.fork_height);
+                    n = if right_node.is_zero() {
+                        left_node.clone()
+                    } else {
+                        right_node.clone()
+                    };
+                }
+                let leaf = self.store.get_leaf(&n)?.expect("the leaf should exist");
+                let merkle_proof = self.merkle_proof(vec![leaf.key.clone()])?;
+                left = Some(proof_ics23::convert(
+                    merkle_proof,
+                    &leaf.key,
+                    &leaf.value.to_h256(),
+                ));
+            } else if !is_right && right.is_none() {
+                // get the right which is the most left in the right subtree
+                let mut n = node.clone();
+                while let Some(branch) = self.store.get_branch(&n)? {
+                    if branch.fork_height == 0 {
+                        break;
+                    }
+                    let (left_node, right_node) = branch.branch(branch.fork_height);
+                    n = if left_node.is_zero() {
+                        right_node.clone()
+                    } else {
+                        left_node.clone()
+                    };
+                }
+                let leaf = self.store.get_leaf(&n)?.expect("the leaf should exist");
+                let merkle_proof = self.merkle_proof(vec![leaf.key.clone()])?;
+                right = Some(proof_ics23::convert(
+                    merkle_proof,
+                    &leaf.key,
+                    &leaf.value.to_h256(),
+                ));
+            }
+            if left.is_some() && right.is_some() {
+                break;
+            }
+        }
+        let proof = NonExistenceProof {
+            key: key.as_slice().to_vec(),
+            left,
+            right,
+        };
+        Ok(CommitmentProof {
+            proof: Some(Proof::Nonexist(proof)),
+        })
     }
 }

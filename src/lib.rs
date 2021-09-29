@@ -14,7 +14,7 @@
 //! type SMT = SparseMerkleTree<Blake2bHasher, Word, DefaultStore<Word>>;
 //!
 //! // define SMT value
-//! #[derive(Default, Clone)]
+//! #[derive(Default, Clone, PartialEq)]
 //! pub struct Word(String);
 //! impl Value for Word {
 //!    fn to_h256(&self) -> H256 {
@@ -68,6 +68,8 @@ pub mod error;
 pub mod h256;
 pub mod merge;
 pub mod merkle_proof;
+pub mod proof_ics23;
+pub mod sha256;
 #[cfg(test)]
 mod tests;
 pub mod traits;

@@ -14,6 +14,8 @@ pub enum Error {
     NonSiblings,
     InvalidCode(u8),
     NonMergableRange,
+    ExistenceProof,
+    NonExistenceProof,
 }
 
 impl core::fmt::Display for Error {
@@ -52,6 +54,12 @@ impl core::fmt::Display for Error {
             }
             Error::NonMergableRange => {
                 write!(f, "Ranges can not be merged")?;
+            }
+            Error::ExistenceProof => {
+                write!(f, "Try to get ExistenceProof for non existing value")?;
+            }
+            Error::NonExistenceProof => {
+                write!(f, "Try to get NonExistenceProof for the existing value")?;
             }
         }
         Ok(())
