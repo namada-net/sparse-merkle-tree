@@ -1,8 +1,10 @@
 use ics23::{ExistenceProof, HashOp, InnerOp, InnerSpec, LeafOp, LengthOp, ProofSpec};
 
-use crate::{collections::VecDeque, MerkleProof, H256, TREE_HEIGHT};
+use crate::collections::VecDeque;
+use crate::error::{Error, Result};
+use crate::{MerkleProof, H256, TREE_HEIGHT};
 
-pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> ExistenceProof {
+pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Result<ExistenceProof> {
     let (leaves_path, proof) = merkle_proof.take();
     let mut merge_heights: VecDeque<_> = leaves_path
         .get(0)
@@ -16,7 +18,7 @@ pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Existence
     while !proof.is_empty() {
         if height == TREE_HEIGHT {
             if !proof.is_empty() {
-                panic!("unexpected proof {:?}, height: {}", proof, height);
+                return Err(Error::CorruptedProof);
             }
             break;
         }
@@ -43,12 +45,12 @@ pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Existence
         height += 1;
     }
 
-    ExistenceProof {
+    Ok(ExistenceProof {
         key: key.as_slice().to_vec(),
         value: value.as_slice().to_vec(),
         leaf: Some(get_leaf_op()),
         path,
-    }
+    })
 }
 
 fn get_leaf_op() -> LeafOp {

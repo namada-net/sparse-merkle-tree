@@ -389,19 +389,20 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         Ok(MerkleProof::new(leaves_path, proof))
     }
 
-    /// Generate merkle proof for ICS 23
+    /// Generate ICS 23 commitment proof for the existing key
     pub fn membership_proof(&self, key: &H256) -> Result<CommitmentProof> {
         let value = self.get(key)?;
         if value == V::zero() {
             return Err(Error::ExistenceProof);
         }
         let merkle_proof = self.merkle_proof(vec![*key])?;
-        let existence_proof = proof_ics23::convert(merkle_proof, key, &value.to_h256());
+        let existence_proof = proof_ics23::convert(merkle_proof, key, &value.to_h256())?;
         Ok(CommitmentProof {
             proof: Some(Proof::Exist(existence_proof)),
         })
     }
 
+    /// Generate ICS 23 commitment proof for the non-existing key
     pub fn non_membership_proof(&self, key: &H256) -> Result<CommitmentProof> {
         let value = self.get(key)?;
         if value != V::zero() {
@@ -440,7 +441,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     merkle_proof,
                     &leaf.key,
                     &leaf.value.to_h256(),
-                ));
+                )?);
             } else if !is_right && right.is_none() {
                 // get the right which is the most left in the right subtree
                 let mut n = *node;
@@ -461,7 +462,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     merkle_proof,
                     &leaf.key,
                     &leaf.value.to_h256(),
-                ));
+                )?);
             }
             if left.is_some() && right.is_some() {
                 break;
