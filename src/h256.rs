@@ -1,13 +1,13 @@
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
-use core::cmp::Ordering;
 
 /// Represent 256 bits
-#[derive(Eq, PartialEq, Debug, Default, Hash, Clone, Copy)]
+#[derive(Eq, PartialEq, Debug, Default, Hash, Clone, Copy, PartialOrd, Ord)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct H256([u8; 32]);
 
 const ZERO: H256 = H256([0u8; 32]);
+const MAX_INDEX: u8 = 31;
 const BYTE_SIZE: u8 = 8;
 
 impl H256 {
@@ -21,7 +21,7 @@ impl H256 {
 
     #[inline]
     pub fn get_bit(&self, i: u8) -> bool {
-        let byte_pos = i / BYTE_SIZE;
+        let byte_pos = MAX_INDEX - i / BYTE_SIZE;
         let bit_pos = i % BYTE_SIZE;
         let bit = self.0[byte_pos as usize] >> bit_pos & 1;
         bit != 0
@@ -29,14 +29,14 @@ impl H256 {
 
     #[inline]
     pub fn set_bit(&mut self, i: u8) {
-        let byte_pos = i / BYTE_SIZE;
+        let byte_pos = MAX_INDEX - i / BYTE_SIZE;
         let bit_pos = i % BYTE_SIZE;
         self.0[byte_pos as usize] |= 1 << bit_pos as u8;
     }
 
     #[inline]
     pub fn clear_bit(&mut self, i: u8) {
-        let byte_pos = i / BYTE_SIZE;
+        let byte_pos = MAX_INDEX - i / BYTE_SIZE;
         let bit_pos = i % BYTE_SIZE;
         self.0[byte_pos as usize] &= !((1 << bit_pos) as u8);
     }
@@ -69,6 +69,7 @@ impl H256 {
     /// Copy bits and return a new H256
     pub fn copy_bits(&self, range: impl core::ops::RangeBounds<u8>) -> Self {
         const MAX: usize = 256;
+        const ARRAY_SIZE: usize = 32;
         const BYTE: usize = 8;
         use core::ops::Bound;
 
@@ -95,38 +96,25 @@ impl H256 {
             panic!("end can't less than start: start {} end {}", start, end);
         }
 
-        let start_byte = {
+        let end_byte = {
             let remain = if start % BYTE != 0 { 1 } else { 0 };
-            start / BYTE + remain
+            ARRAY_SIZE - start / BYTE - remain
         };
-        let end_byte = end / BYTE;
+        let start_byte = ARRAY_SIZE - end / BYTE;
         // copy bytes
         if start_byte < self.0.len() && start_byte <= end_byte {
             target.0[start_byte..end_byte].copy_from_slice(&self.0[start_byte..end_byte]);
         }
 
         // copy remain bits
-        for i in (start..core::cmp::min(start_byte * BYTE, end))
-            .chain(core::cmp::max(end_byte * BYTE, start)..end)
+        for i in (start..core::cmp::min((ARRAY_SIZE - end_byte) * BYTE, end))
+            .chain(core::cmp::max((ARRAY_SIZE - start_byte) * BYTE, start)..end)
         {
             if self.get_bit(i as u8) {
                 target.set_bit(i as u8)
             }
         }
         target
-    }
-}
-
-impl PartialOrd for H256 {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for H256 {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // Compare bits from heigher to lower (255..0)
-        self.0.iter().rev().cmp(other.0.iter().rev())
     }
 }
 
