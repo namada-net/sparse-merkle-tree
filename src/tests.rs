@@ -463,7 +463,7 @@ proptest! {
     #[test]
     fn test_ics23_proof_single_leaf_small((pairs, _n) in leaves(1, 50)){
         let smt = new_sha_smt(pairs.clone());
-        let spec = proof_ics23::get_spec();
+        let spec = proof_ics23::get_spec(ics23::HashOp::Sha256);
         let root = smt.root().as_slice().to_vec();
         for (k, v) in pairs {
             let proof = smt.membership_proof(&k).expect("gen proof");
@@ -474,7 +474,7 @@ proptest! {
     #[test]
     fn test_ics23_proof_non_exists_leaves((pairs, _n) in leaves(1, 20), (pairs2, _n2) in leaves(1, 5)) {
         let smt = new_sha_smt(pairs.clone());
-        let spec = proof_ics23::get_spec();
+        let spec = proof_ics23::get_spec(ics23::HashOp::Sha256);
         let root = smt.root().as_slice().to_vec();
         let exists_key: Vec<_> = pairs.into_iter().map(|(k, _v)|k).collect();
         let non_exists_keys: Vec<_> = pairs2.into_iter().map(|(k, _v)|k).filter(|k| !exists_key.contains(&k)).collect();

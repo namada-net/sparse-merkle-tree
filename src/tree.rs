@@ -396,7 +396,8 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
             return Err(Error::ExistenceProof);
         }
         let merkle_proof = self.merkle_proof(vec![*key])?;
-        let existence_proof = proof_ics23::convert(merkle_proof, key, &value.to_h256())?;
+        let existence_proof =
+            proof_ics23::convert(merkle_proof, key, &value.to_h256(), H::hash_op())?;
         Ok(CommitmentProof {
             proof: Some(Proof::Exist(existence_proof)),
         })
@@ -441,6 +442,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     merkle_proof,
                     &leaf.key,
                     &leaf.value.to_h256(),
+                    H::hash_op(),
                 )?);
             } else if !is_right && right.is_none() {
                 // get the right which is the most left in the right subtree
@@ -462,6 +464,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     merkle_proof,
                     &leaf.key,
                     &leaf.value.to_h256(),
+                    H::hash_op(),
                 )?);
             }
             if left.is_some() && right.is_some() {

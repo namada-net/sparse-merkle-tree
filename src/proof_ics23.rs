@@ -4,7 +4,12 @@ use crate::collections::VecDeque;
 use crate::error::{Error, Result};
 use crate::{MerkleProof, H256, TREE_HEIGHT};
 
-pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Result<ExistenceProof> {
+pub fn convert(
+    merkle_proof: MerkleProof,
+    key: &H256,
+    value: &H256,
+    hash_op: HashOp,
+) -> Result<ExistenceProof> {
     let (leaves_path, proof) = merkle_proof.take();
     let mut merge_heights: VecDeque<_> = leaves_path
         .get(0)
@@ -37,7 +42,7 @@ pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Result<Ex
             // skip heights
             height = sibling_height as usize;
         }
-        let inner_op = get_inner_op(&sibling, cur_key.get_bit(height as u8));
+        let inner_op = get_inner_op(hash_op, &sibling, cur_key.get_bit(height as u8));
         path.push(inner_op);
 
         merge_heights.pop_front();
@@ -48,15 +53,23 @@ pub fn convert(merkle_proof: MerkleProof, key: &H256, value: &H256) -> Result<Ex
     Ok(ExistenceProof {
         key: key.as_slice().to_vec(),
         value: value.as_slice().to_vec(),
-        leaf: Some(get_leaf_op()),
+        leaf: Some(get_leaf_op(hash_op)),
         path,
     })
 }
 
-fn get_leaf_op() -> LeafOp {
+pub fn get_spec(hash_op: HashOp) -> ProofSpec {
+    ProofSpec {
+        leaf_spec: Some(get_leaf_op(hash_op)),
+        inner_spec: Some(get_inner_spec(hash_op)),
+        max_depth: TREE_HEIGHT as i32,
+        min_depth: 0,
+    }
+}
+
+fn get_leaf_op(hash_op: HashOp) -> LeafOp {
     LeafOp {
-        // TODO check the hasher
-        hash: HashOp::Sha256.into(),
+        hash: hash_op.into(),
         prehash_key: HashOp::NoHash.into(),
         prehash_value: HashOp::NoHash.into(),
         length: LengthOp::NoPrefix.into(),
@@ -64,7 +77,7 @@ fn get_leaf_op() -> LeafOp {
     }
 }
 
-fn get_inner_op(sibling: &H256, is_right_node: bool) -> InnerOp {
+fn get_inner_op(hash_op: HashOp, sibling: &H256, is_right_node: bool) -> InnerOp {
     let node = sibling.as_slice().to_vec();
     let (prefix, suffix) = if is_right_node {
         (node, vec![])
@@ -72,28 +85,19 @@ fn get_inner_op(sibling: &H256, is_right_node: bool) -> InnerOp {
         (vec![], node)
     };
     InnerOp {
-        hash: HashOp::Sha256.into(),
+        hash: hash_op.into(),
         prefix,
         suffix,
     }
 }
 
-pub fn get_spec() -> ProofSpec {
-    ProofSpec {
-        leaf_spec: Some(get_leaf_op()),
-        inner_spec: Some(get_inner_spec()),
-        max_depth: TREE_HEIGHT as i32,
-        min_depth: 0,
-    }
-}
-
-fn get_inner_spec() -> InnerSpec {
+fn get_inner_spec(hash_op: HashOp) -> InnerSpec {
     InnerSpec {
         child_order: vec![0, 1],
         child_size: 32,
         min_prefix_length: 0,
         max_prefix_length: 32,
         empty_child: vec![],
-        hash: HashOp::Sha256.into(),
+        hash: hash_op.into(),
     }
 }

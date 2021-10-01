@@ -23,4 +23,8 @@ impl Hasher for Sha256Hasher {
             .expect("Sha256 output conversion to fixed array shouldn't fail");
         bytes.into()
     }
+
+    fn hash_op() -> ics23::HashOp {
+        ics23::HashOp::Sha256
+    }
 }

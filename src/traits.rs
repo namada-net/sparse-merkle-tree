@@ -8,6 +8,9 @@ use crate::{
 pub trait Hasher {
     fn write_h256(&mut self, h: &H256);
     fn finish(self) -> H256;
+    fn hash_op() -> ics23::HashOp {
+        ics23::HashOp::NoHash
+    }
 }
 
 /// Trait for define value structures
