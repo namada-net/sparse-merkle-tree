@@ -50,6 +50,10 @@ impl Key for HashPrefixedKey {
         hasher.write_bytes(self.hash.as_slice());
         hasher.write_bytes(self.key.as_slice());
     }
+
+    fn to_vec(&self) -> Vec<u8> {
+        [self.hash.as_slice(), self.key.as_slice()].concat()
+    }
 }
 
 #[test]

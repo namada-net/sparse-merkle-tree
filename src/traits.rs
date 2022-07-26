@@ -17,6 +17,16 @@ pub trait Hasher {
 /// Trait for key values
 pub trait Key: Clone + Default + Deref<Target = H256> {
     fn write_bytes<H: Hasher>(&self, hasher: &mut H);
+    /*fn write_bytes<W: Writer>(&self, buf: &mut W);
+    fn write_to_hasher<H: Hasher>(&self, hasher: &mut H) {
+        hasher.write_bytes(self.to_vec().as_slice());
+    }
+    fn to_vec(&self) -> Vec<u8> {
+        let mut buf = vec![];
+        self.write_bytes(&mut buf);
+        buf
+    }*/
+    fn to_vec(&self) -> Vec<u8>;
     fn is_equal(&self, other: &Self) -> bool {
         let hash_self = <Self as Deref>::deref(self);
         let hash_other = <Self as Deref>::deref(other);
@@ -41,6 +51,10 @@ impl DerefMut for Hash {
 impl Key for Hash {
     fn write_bytes<H: Hasher>(&self, hasher: &mut H) {
         hasher.write_bytes(self.as_slice());
+    }
+
+    fn to_vec(&self) -> Vec<u8> {
+        self.as_slice().to_vec()
     }
 }
 

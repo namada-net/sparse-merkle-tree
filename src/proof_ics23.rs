@@ -52,7 +52,7 @@ pub fn convert<K: Key>(
     }
 
     Ok(ExistenceProof {
-        key: key.as_slice().to_vec(),
+        key: key.to_vec(),
         value: value.as_slice().to_vec(),
         leaf: Some(get_leaf_op(hash_op)),
         path,
