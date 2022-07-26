@@ -6,6 +6,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct H256([u8; 32]);
 
+/// A 256 hash usable as a Key
+#[derive(Eq, PartialEq, Debug, Default, Hash, Clone, Copy, PartialOrd, Ord)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+pub struct Hash(pub H256);
+
 const ZERO: H256 = H256([0u8; 32]);
 const MAX_INDEX: u8 = 31;
 const BYTE_SIZE: u8 = 8;
@@ -124,8 +129,20 @@ impl From<[u8; 32]> for H256 {
     }
 }
 
-impl Into<[u8; 32]> for H256 {
-    fn into(self: H256) -> [u8; 32] {
-        self.0
+impl From<H256> for [u8; 32] {
+    fn from(v: H256) -> [u8; 32] {
+        v.0
+    }
+}
+
+impl From<[u8; 32]> for Hash {
+    fn from(v: [u8; 32]) -> Hash {
+        Hash(v.into())
+    }
+}
+
+impl From<Hash> for [u8; 32] {
+    fn from(hash: Hash) -> [u8; 32] {
+        hash.0.into()
     }
 }

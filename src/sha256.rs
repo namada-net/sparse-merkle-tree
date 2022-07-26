@@ -2,17 +2,12 @@ use crate::{traits::Hasher, H256};
 use core::convert::TryInto;
 use sha2::{Digest, Sha256};
 
+#[derive(Default)]
 pub struct Sha256Hasher(Sha256);
 
-impl Default for Sha256Hasher {
-    fn default() -> Self {
-        Self(Sha256::default())
-    }
-}
-
 impl Hasher for Sha256Hasher {
-    fn write_h256(&mut self, h: &H256) {
-        self.0.update(h.as_slice());
+    fn write_bytes(&mut self, h: &[u8]) {
+        self.0.update(h);
     }
 
     fn finish(self) -> H256 {

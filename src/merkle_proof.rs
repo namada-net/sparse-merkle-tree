@@ -2,7 +2,7 @@ use crate::{
     collections::{BTreeMap, VecDeque},
     error::{Error, Result},
     merge::{hash_leaf, merge},
-    traits::Hasher,
+    traits::{Hasher, Key},
     vec::Vec,
     H256, TREE_HEIGHT,
 };
@@ -11,7 +11,9 @@ type Range = core::ops::Range<usize>;
 
 #[derive(Debug, Clone)]
 pub struct MerkleProof {
+    /// contains height of non-zero siblings
     leaves_path: Vec<Vec<u8>>,
+    /// The height of each leaf in the proof
     proof: Vec<(H256, u8)>,
 }
 
@@ -132,7 +134,10 @@ impl MerkleProof {
     ///
     /// return EmptyProof error when proof is empty
     /// return CorruptedProof error when proof is invalid
-    pub fn compute_root<H: Hasher + Default>(self, mut leaves: Vec<(H256, H256)>) -> Result<H256> {
+    pub fn compute_root<H: Hasher + Default, K: Key>(
+        self,
+        mut leaves: Vec<(K, H256)>,
+    ) -> Result<H256> {
         if leaves.is_empty() {
             return Err(Error::EmptyKeys);
         } else if leaves.len() != self.leaves_count() {
@@ -147,12 +152,12 @@ impl MerkleProof {
         let mut proof: VecDeque<_> = proof.into();
 
         // sort leaves
-        leaves.sort_unstable_by_key(|(k, _v)| *k);
+        leaves.sort_unstable_by_key(|(k, _v)| **k);
         // tree_buf: (height, key) -> (key_index, node)
         let mut tree_buf: BTreeMap<_, _> = leaves
             .into_iter()
             .enumerate()
-            .map(|(i, (k, v))| ((0, k), (i, hash_leaf::<H>(&k, &v))))
+            .map(|(i, (k, v))| ((0, *k), (i, hash_leaf::<H, K>(&k, &v))))
             .collect();
         // rebuild the tree from bottom to top
         while !tree_buf.is_empty() {
@@ -216,19 +221,18 @@ impl MerkleProof {
 
     /// Verify merkle proof
     /// see compute_root_from_proof
-    pub fn verify<H: Hasher + Default>(
+    pub fn verify<H: Hasher + Default, K: Key>(
         self,
         root: &H256,
-        leaves: Vec<(H256, H256)>,
+        leaves: Vec<(K, H256)>,
     ) -> Result<bool> {
-        let calculated_root = self.compute_root::<H>(leaves)?;
+        let calculated_root = self.compute_root::<H, K>(leaves)?;
         Ok(&calculated_root == root)
     }
 }
 
 fn leaf_program(leaf_index: usize) -> (Vec<u8>, Option<Range>) {
-    let mut program = Vec::with_capacity(1);
-    program.push(0x4C);
+    let program = vec![0x4C];
     (
         program,
         Some(Range {
@@ -297,8 +301,11 @@ fn merge_program(
 pub struct CompiledMerkleProof(pub Vec<u8>);
 
 impl CompiledMerkleProof {
-    pub fn compute_root<H: Hasher + Default>(&self, mut leaves: Vec<(H256, H256)>) -> Result<H256> {
-        leaves.sort_unstable_by_key(|(k, _v)| *k);
+    pub fn compute_root<H: Hasher + Default, K: Key>(
+        &self,
+        mut leaves: Vec<(K, H256)>,
+    ) -> Result<H256> {
+        leaves.sort_unstable_by_key(|(k, _v)| **k);
         let mut program_index = 0;
         let mut leave_index = 0;
         let mut stack = Vec::new();
@@ -311,8 +318,8 @@ impl CompiledMerkleProof {
                     if leave_index >= leaves.len() {
                         return Err(Error::CorruptedStack);
                     }
-                    let (k, v) = leaves[leave_index];
-                    stack.push((k, hash_leaf::<H>(&k, &v)));
+                    let (k, v) = leaves[leave_index].clone();
+                    stack.push((*k, hash_leaf::<H, K>(&k, &v)));
                     leave_index += 1;
                 }
                 // P
@@ -378,12 +385,12 @@ impl CompiledMerkleProof {
         Ok(stack[0].1)
     }
 
-    pub fn verify<H: Hasher + Default>(
+    pub fn verify<H: Hasher + Default, K: Key>(
         &self,
         root: &H256,
-        leaves: Vec<(H256, H256)>,
+        leaves: Vec<(K, H256)>,
     ) -> Result<bool> {
-        let calculated_root = self.compute_root::<H>(leaves)?;
+        let calculated_root = self.compute_root::<H, K>(leaves)?;
         Ok(&calculated_root == root)
     }
 }

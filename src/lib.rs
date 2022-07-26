@@ -6,12 +6,12 @@
 //! use sparse_merkle_tree::{
 //!     blake2b::Blake2bHasher, default_store::DefaultStore,
 //!     error::Error, MerkleProof,
-//!     SparseMerkleTree, traits::Value, H256
+//!     SparseMerkleTree, traits::Value, H256, Hash,
 //! };
 //! use blake2b_rs::{Blake2b, Blake2bBuilder};
 //!
 //! // define SMT
-//! type SMT = SparseMerkleTree<Blake2bHasher, Word, DefaultStore<Word>>;
+//! type SMT = SparseMerkleTree<Blake2bHasher, Hash, Word, DefaultStore<Hash, Word>>;
 //!
 //! // define SMT value
 //! #[derive(Default, Clone, PartialEq)]
@@ -43,7 +43,7 @@
 //!         .split_whitespace()
 //!         .enumerate()
 //!     {
-//!         let key: H256 = {
+//!         let key: Hash = {
 //!             let mut buf = [0u8; 32];
 //!             let mut hasher = new_blake2b();
 //!             hasher.update(&(i as u32).to_le_bytes());
@@ -75,7 +75,7 @@ mod tests;
 pub mod traits;
 pub mod tree;
 
-pub use h256::H256;
+pub use h256::{Hash, H256};
 pub use merkle_proof::{CompiledMerkleProof, MerkleProof};
 pub use tree::SparseMerkleTree;
 

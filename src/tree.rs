@@ -4,7 +4,7 @@ use crate::{
     merge::{hash_leaf, merge},
     merkle_proof::MerkleProof,
     proof_ics23,
-    traits::{Hasher, Store, Value},
+    traits::{Hasher, Key, Store, Value},
     vec::Vec,
     EXPECTED_PATH_SIZE, H256, TREE_HEIGHT,
 };
@@ -17,14 +17,18 @@ use ics23::{CommitmentProof, NonExistenceProof};
 /// A branch in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct BranchNode {
+pub struct BranchNode<K: Key> {
     pub fork_height: u8,
-    pub key: H256,
+    /// The key this branch is pointing to
+    pub key: K,
+    /// The hash of node, derived from children
     pub node: H256,
+    /// The other child of this node
     pub sibling: H256,
 }
 
-impl BranchNode {
+impl<K: Key> BranchNode<K> {
+    /// Determines if `node` is left or right of `sibling`
     fn branch(&self, height: u8) -> (&H256, &H256) {
         let is_right = self.key.get_bit(height);
         if is_right {
@@ -35,25 +39,40 @@ impl BranchNode {
     }
 }
 
-/// A leaf in the SMT
+/// A leaf in the SMT; a key-value pair in the storage
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct LeafNode<V> {
-    pub key: H256,
+pub struct LeafNode<K: Key, V: Value> {
+    pub key: K,
     pub value: V,
 }
 
 /// Sparse merkle tree
+/// The tree is considered oriented so that the root is
+/// the top and the leaves are the bottom.
 #[derive(Default, Debug)]
-pub struct SparseMerkleTree<H, V, S> {
+pub struct SparseMerkleTree<H, K, V, S>
+where
+    K: Key,
+    V: Value,
+    S: Store<K, V>,
+{
+    /// Backing storage of the SMT
     store: S,
+    /// Root hash of the entire SMT
     root: H256,
-    phantom: PhantomData<(H, V)>,
+    phantom: PhantomData<(K, H, V)>,
 }
 
-impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMerkleTree<H, V, S> {
+impl<H, K, V, S> SparseMerkleTree<H, K, V, S>
+where
+    H: Hasher + Default,
+    K: Key,
+    V: Value + core::cmp::PartialEq,
+    S: Store<K, V>,
+{
     /// Build a merkle tree from root and store
-    pub fn new(root: H256, store: S) -> SparseMerkleTree<H, V, S> {
+    pub fn new(root: H256, store: S) -> SparseMerkleTree<H, K, V, S> {
         SparseMerkleTree {
             root,
             store,
@@ -66,7 +85,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         &self.root
     }
 
-    /// Check empty of the tree
+    /// Check emptiness of the tree
     pub fn is_empty(&self) -> bool {
         self.root.is_zero()
     }
@@ -76,40 +95,40 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         self.store
     }
 
-    /// Get backend store
+    /// Get reference to backend store
     pub fn store(&self) -> &S {
         &self.store
     }
 
-    /// Get mutable backend store
+    /// Get mutable reference to backend store
     pub fn store_mut(&mut self) -> &mut S {
         &mut self.store
     }
 
-    /// Update a leaf, return new merkle root
-    /// set to zero value to delete a key
-    pub fn update(&mut self, key: H256, value: V) -> Result<&H256> {
+    /// Update a leaf, return new merkle root.
+    /// Setting a value to zero deletes the key.
+    pub fn update(&mut self, key: K, value: V) -> Result<&H256> {
         // store the path, sparse index will ignore zero members
         let mut path: BTreeMap<_, _> = Default::default();
-        // walk path from top to bottom
+        // walk path from top to bottom.
         let mut node = self.root;
         let mut branch = self.store.get_branch(&node)?;
         let mut height = branch
             .as_ref()
-            .map(|b| max(b.key.fork_height(&key), b.fork_height))
+            .map(|b: &BranchNode<K>| max(b.key.fork_height(&*key), b.fork_height))
             .unwrap_or(0);
         // branch.is_none() represents the descendants are zeros, so we can stop the
         // loop
         while branch.is_some() {
             let branch_node = branch.unwrap();
-            let fork_height = max(key.fork_height(&branch_node.key), branch_node.fork_height);
+            let fork_height = max(key.fork_height(&*branch_node.key), branch_node.fork_height);
             if height > branch_node.fork_height {
                 // the merge height is higher than node, so we do not need to remove node's
                 // branch
                 path.insert(fork_height, node);
                 break;
             }
-            // branch node is parent if height is less than branch_node's height
+            // branch node is parent if height is less than branch_node's height;
             // remove it from store
             if branch_node.fork_height > 0 {
                 self.store.remove_branch(&node)?;
@@ -134,28 +153,34 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
             // get next branch and fork_height
             branch = self.store.get_branch(&node)?;
             if let Some(branch_node) = branch.as_ref() {
-                height = max(key.fork_height(&branch_node.key), branch_node.fork_height);
+                height = max(key.fork_height(&*branch_node.key), branch_node.fork_height);
             }
         }
         // delete previous leaf
         if let Some(leaf) = self.store.get_leaf(&node)? {
-            if leaf.key == key {
+            if leaf.key.is_equal(&key) {
                 self.store.remove_leaf(&node)?;
                 self.store.remove_branch(&node)?;
             }
         }
 
         // compute and store new leaf
-        let mut node = hash_leaf::<H>(&key, &value.to_h256());
-        // notice when value is zero the leaf is deleted, so we do not need to store it
+        let mut node = hash_leaf::<H, K>(&key, &value.to_h256());
+        // notice when value is zero, the leaf is deleted, so we do not need to store it
         if !node.is_zero() {
-            self.store.insert_leaf(node, LeafNode { key, value })?;
+            self.store.insert_leaf(
+                node,
+                LeafNode {
+                    key: key.clone(),
+                    value,
+                },
+            )?;
 
-            // build at least one branch for leaf
+            // there should be at least one branch for each leaf
             self.store.insert_branch(
                 node,
                 BranchNode {
-                    key,
+                    key: key.clone(),
                     fork_height: 0,
                     node,
                     sibling: H256::zero(),
@@ -177,12 +202,12 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
             };
 
             if !node.is_zero() {
-                // node is exists
+                // node exists
                 let branch_node = BranchNode {
                     fork_height: height as u8,
                     sibling,
                     node,
-                    key,
+                    key: key.clone(),
                 };
                 self.store.insert_branch(parent, branch_node)?;
             }
@@ -193,10 +218,10 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
     }
 
     /// Get value of a leaf
-    /// return zero value if leaf not exists
-    pub fn get(&self, key: &H256) -> Result<V> {
+    /// return zero if leaf does not exist
+    pub fn get(&self, key: &K) -> Result<V> {
         let mut node = self.root;
-        // children must equals to zero when parent equals to zero
+        // children must equal zero when parent equals zero
         while !node.is_zero() {
             let branch_node = match self.store.get_branch(&node)? {
                 Some(branch_node) => branch_node,
@@ -216,18 +241,18 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
             }
         }
 
-        // return zero is leaf_key is zero
+        // return zero if leaf_key is zero
         if node.is_zero() {
             return Ok(V::zero());
         }
         // get leaf node
         match self.store.get_leaf(&node)? {
-            Some(leaf) if &leaf.key == key => Ok(leaf.value),
+            Some(leaf) if leaf.key.is_equal(key) => Ok(leaf.value),
             _ => Ok(V::zero()),
         }
     }
 
-    /// fetch merkle path of key into cache
+    /// fetch merkle path of key and put into cache
     /// cache: (height, key) -> node
     fn fetch_merkle_path(
         &self,
@@ -238,7 +263,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         let mut height = self
             .store
             .get_branch(&node)?
-            .map(|b| max(b.key.fork_height(&key), b.fork_height))
+            .map(|b: BranchNode<K>| max(b.key.fork_height(key), b.fork_height))
             .unwrap_or(0);
         while !node.is_zero() {
             // the descendants are zeros, so we can break the loop
@@ -247,16 +272,14 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
             }
             match self.store.get_branch(&node)? {
                 Some(branch_node) => {
-                    if height <= branch_node.fork_height {
-                        // node is child
-                    } else {
+                    // node is child otherwise
+                    if height > branch_node.fork_height {
                         let fork_height =
-                            max(key.fork_height(&branch_node.key), branch_node.fork_height);
+                            max(key.fork_height(&*branch_node.key), branch_node.fork_height);
 
                         let is_right = key.get_bit(fork_height as u8);
                         let mut sibling_key = key.parent_path(fork_height as u8);
-                        if is_right {
-                        } else {
+                        if !is_right {
                             // mark sibling's index, sibling on the right path.
                             sibling_key.set_bit(height as u8);
                         };
@@ -269,30 +292,26 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     }
                     let (left, right) = branch_node.branch(height);
                     let is_right = key.get_bit(height);
-                    let sibling;
-                    if is_right {
-                        if &node == right {
-                            break;
-                        }
-                        sibling = *left;
-                        node = *right;
-                    } else {
-                        if &node == left {
-                            break;
-                        }
-                        sibling = *right;
-                        node = *left;
-                    }
                     let mut sibling_key = key.parent_path(height as u8);
-                    if is_right {
+                    let sibling = if is_right {
+                        if node == *right {
+                            break;
+                        }
+                        node = *right;
+                        *left
                     } else {
+                        if node == *left {
+                            break;
+                        }
+                        node = *left;
                         // mark sibling's index, sibling on the right path.
                         sibling_key.set_bit(height as u8);
+                        *right
                     };
                     cache.insert((height as usize, sibling_key), sibling);
                     if let Some(branch_node) = self.store.get_branch(&node)? {
                         let fork_height =
-                            max(key.fork_height(&branch_node.key), branch_node.fork_height);
+                            max(key.fork_height(&*branch_node.key), branch_node.fork_height);
                         height = fork_height;
                     }
                 }
@@ -311,8 +330,8 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         // sort keys
         keys.sort_unstable();
 
-        // fetch all merkle path
-        let mut cache: BTreeMap<(usize, H256), H256> = Default::default();
+        // fetch all merkle paths
+        let mut cache = Default::default();
         for k in &keys {
             self.fetch_merkle_path(k, &mut cache)?;
         }
@@ -326,11 +345,8 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         let keys_len = keys.len();
         // build merkle proofs from bottom to up
         // (key, height, key_index)
-        let mut queue: VecDeque<(H256, usize, usize)> = keys
-            .into_iter()
-            .enumerate()
-            .map(|(i, k)| (k, 0, i))
-            .collect();
+        let mut queue: VecDeque<(H256, usize, usize)> =
+            keys.iter().enumerate().map(|(i, k)| (*k, 0, i)).collect();
 
         while let Some((key, height, leaf_index)) = queue.pop_front() {
             if queue.is_empty() && cache.is_empty() || height == TREE_HEIGHT {
@@ -340,18 +356,18 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                 }
                 break;
             }
-            // compute sibling key
-            let mut sibling_key = key.parent_path(height as u8);
+            // compute sibling key hash
+            let mut sibling_key_hash = key.parent_path(height as u8);
 
             let is_right = key.get_bit(height as u8);
             if is_right {
                 // sibling on left
-                sibling_key.clear_bit(height as u8);
+                sibling_key_hash.clear_bit(height as u8);
             } else {
                 // sibling on right
-                sibling_key.set_bit(height as u8);
+                sibling_key_hash.set_bit(height as u8);
             }
-            if Some((&sibling_key, &height))
+            if Some((&sibling_key_hash, &height))
                 == queue
                     .front()
                     .map(|(sibling_key, height, _leaf_index)| (sibling_key, height))
@@ -360,7 +376,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                 let (_sibling_key, height, leaf_index) = queue.pop_front().unwrap();
                 leaves_path[leaf_index].push(height as u8);
             } else {
-                match cache.remove(&(height, sibling_key)) {
+                match cache.remove(&(height, sibling_key_hash)) {
                     Some(sibling) => {
                         debug_assert!(height <= core::u8::MAX as usize);
                         // save first non-zero sibling's height for leaves
@@ -369,9 +385,9 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     None => {
                         // skip zero siblings
                         if !is_right {
-                            sibling_key.clear_bit(height as u8);
+                            sibling_key_hash.clear_bit(height as u8);
                         }
-                        let parent_key = sibling_key;
+                        let parent_key = sibling_key_hash;
                         queue.push_back((parent_key, height + 1, leaf_index));
                         continue;
                     }
@@ -381,7 +397,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
             leaves_path[leaf_index].push(height as u8);
             if height < TREE_HEIGHT {
                 // get parent_key, which k.get_bit(height) is false
-                let parent_key = if is_right { sibling_key } else { key };
+                let parent_key = if is_right { sibling_key_hash } else { key };
                 queue.push_back((parent_key, height + 1, leaf_index));
             }
         }
@@ -390,12 +406,12 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
     }
 
     /// Generate ICS 23 commitment proof for the existing key
-    pub fn membership_proof(&self, key: &H256) -> Result<CommitmentProof> {
+    pub fn membership_proof(&self, key: &K) -> Result<CommitmentProof> {
         let value = self.get(key)?;
         if value == V::zero() {
             return Err(Error::ExistenceProof);
         }
-        let merkle_proof = self.merkle_proof(vec![*key])?;
+        let merkle_proof = self.merkle_proof(vec![**key])?;
         let existence_proof =
             proof_ics23::convert(merkle_proof, key, &value.to_h256(), H::hash_op())?;
         Ok(CommitmentProof {
@@ -403,14 +419,14 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
         })
     }
 
-    /// Generate ICS 23 commitment proof for the non-existing key
-    pub fn non_membership_proof(&self, key: &H256) -> Result<CommitmentProof> {
+    /// Generate ICS 23 commitment proof for the non-existent key
+    pub fn non_membership_proof(&self, key: &K) -> Result<CommitmentProof> {
         let value = self.get(key)?;
         if value != V::zero() {
             return Err(Error::NonExistenceProof);
         }
 
-        // fetch all merkle path
+        // fetch all merkle paths
         let mut cache: BTreeMap<(usize, H256), H256> = Default::default();
         self.fetch_merkle_path(key, &mut cache)?;
         let mut left = None;
@@ -437,7 +453,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     };
                 }
                 let leaf = self.store.get_leaf(&n)?.expect("the leaf should exist");
-                let merkle_proof = self.merkle_proof(vec![leaf.key])?;
+                let merkle_proof = self.merkle_proof(vec![*leaf.key])?;
                 left = Some(proof_ics23::convert(
                     merkle_proof,
                     &leaf.key,
@@ -459,7 +475,7 @@ impl<H: Hasher + Default, V: Value + core::cmp::PartialEq, S: Store<V>> SparseMe
                     };
                 }
                 let leaf = self.store.get_leaf(&n)?.expect("the leaf should exist");
-                let merkle_proof = self.merkle_proof(vec![leaf.key])?;
+                let merkle_proof = self.merkle_proof(vec![*leaf.key])?;
                 right = Some(proof_ics23::convert(
                     merkle_proof,
                     &leaf.key,
