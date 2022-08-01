@@ -2,11 +2,11 @@ use ics23::{ExistenceProof, HashOp, InnerOp, InnerSpec, LeafOp, LengthOp, ProofS
 
 use crate::collections::VecDeque;
 use crate::error::{Error, Result};
-use crate::{MerkleProof, H256, TREE_HEIGHT};
+use crate::{MerkleProof, PaddedKey, H256, TREE_HEIGHT};
 
-pub fn convert(
+pub fn convert<const N: usize>(
     merkle_proof: MerkleProof,
-    key: &H256,
+    key: &PaddedKey<N>,
     value: &H256,
     hash_op: HashOp,
 ) -> Result<ExistenceProof> {
@@ -17,7 +17,7 @@ pub fn convert(
         .clone()
         .into();
     let mut proof: VecDeque<_> = proof.into();
-    let mut cur_key = *key;
+    let mut cur_key = **key;
     let mut height = 0;
     let mut path = Vec::new();
     while !proof.is_empty() {
@@ -42,11 +42,11 @@ pub fn convert(
             // skip heights
             height = sibling_height as usize;
         }
-        let inner_op = get_inner_op(hash_op, &sibling, cur_key.get_bit(height as u8));
+        let inner_op = get_inner_op(hash_op, &sibling, cur_key.get_bit(height));
         path.push(inner_op);
 
         merge_heights.pop_front();
-        cur_key = cur_key.parent_path(height as u8);
+        cur_key = cur_key.parent_path(height);
         height += 1;
     }
 

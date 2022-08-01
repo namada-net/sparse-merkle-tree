@@ -66,6 +66,7 @@ pub mod blake2b;
 pub mod default_store;
 pub mod error;
 pub mod h256;
+pub mod key;
 pub mod merge;
 pub mod merkle_proof;
 pub mod proof_ics23;
@@ -76,6 +77,7 @@ pub mod traits;
 pub mod tree;
 
 pub use h256::H256;
+pub use key::{Key, PaddedKey};
 pub use merkle_proof::{CompiledMerkleProof, MerkleProof};
 pub use tree::SparseMerkleTree;
 

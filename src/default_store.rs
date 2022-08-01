@@ -10,16 +10,16 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct DefaultStore<V> {
-    branches_map: Map<H256, BranchNode>,
-    leaves_map: Map<H256, LeafNode<V>>,
+pub struct DefaultStore<V, const N: usize> {
+    branches_map: Map<H256, BranchNode<N>>,
+    leaves_map: Map<H256, LeafNode<V, N>>,
 }
 
-impl<V> DefaultStore<V> {
-    pub fn branches_map(&self) -> &Map<H256, BranchNode> {
+impl<V, const N: usize> DefaultStore<V, N> {
+    pub fn branches_map(&self) -> &Map<H256, BranchNode<N>> {
         &self.branches_map
     }
-    pub fn leaves_map(&self) -> &Map<H256, LeafNode<V>> {
+    pub fn leaves_map(&self) -> &Map<H256, LeafNode<V, N>> {
         &self.leaves_map
     }
     pub fn clear(&mut self) {
@@ -28,18 +28,18 @@ impl<V> DefaultStore<V> {
     }
 }
 
-impl<V: Clone> Store<V> for DefaultStore<V> {
-    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode>, Error> {
+impl<V: Clone, const N: usize> Store<V, N> for DefaultStore<V, N> {
+    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode<N>>, Error> {
         Ok(self.branches_map.get(node).map(Clone::clone))
     }
-    fn get_leaf(&self, leaf_hash: &H256) -> Result<Option<LeafNode<V>>, Error> {
+    fn get_leaf(&self, leaf_hash: &H256) -> Result<Option<LeafNode<V, N>>, Error> {
         Ok(self.leaves_map.get(leaf_hash).map(Clone::clone))
     }
-    fn insert_branch(&mut self, node: H256, branch: BranchNode) -> Result<(), Error> {
+    fn insert_branch(&mut self, node: H256, branch: BranchNode<N>) -> Result<(), Error> {
         self.branches_map.insert(node, branch);
         Ok(())
     }
-    fn insert_leaf(&mut self, leaf_hash: H256, leaf: LeafNode<V>) -> Result<(), Error> {
+    fn insert_leaf(&mut self, leaf_hash: H256, leaf: LeafNode<V, N>) -> Result<(), Error> {
         self.leaves_map.insert(leaf_hash, leaf);
         Ok(())
     }

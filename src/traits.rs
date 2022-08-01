@@ -6,7 +6,7 @@ use crate::{
 
 /// Trait for customize hash function
 pub trait Hasher {
-    fn write_h256(&mut self, h: &H256);
+    fn write_bytes(&mut self, h: &[u8]);
     fn finish(self) -> H256;
     fn hash_op() -> ics23::HashOp {
         ics23::HashOp::NoHash
@@ -29,11 +29,12 @@ impl Value for H256 {
 }
 
 /// Trait for customize backend storage
-pub trait Store<V> {
-    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode>, Error>;
-    fn get_leaf(&self, leaf_hash: &H256) -> Result<Option<LeafNode<V>>, Error>;
-    fn insert_branch(&mut self, node: H256, branch: BranchNode) -> Result<(), Error>;
-    fn insert_leaf(&mut self, leaf_hash: H256, leaf: LeafNode<V>) -> Result<(), Error>;
+/// TODO: Decide if we should look up Key or padded key
+pub trait Store<V, const N: usize> {
+    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode<N>>, Error>;
+    fn get_leaf(&self, leaf_key: &H256) -> Result<Option<LeafNode<V, N>>, Error>;
+    fn insert_branch(&mut self, node: H256, branch: BranchNode<N>) -> Result<(), Error>;
+    fn insert_leaf(&mut self, leaf_key: H256, leaf: LeafNode<V, N>) -> Result<(), Error>;
     fn remove_branch(&mut self, node: &H256) -> Result<(), Error>;
-    fn remove_leaf(&mut self, leaf_hash: &H256) -> Result<(), Error>;
+    fn remove_leaf(&mut self, leaf_key: &H256) -> Result<(), Error>;
 }
