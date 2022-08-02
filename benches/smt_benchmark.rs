@@ -3,7 +3,9 @@ extern crate criterion;
 
 use criterion::Criterion;
 use rand::{thread_rng, Rng};
-use sparse_merkle_tree::{blake2b::Blake2bHasher, default_store::DefaultStore, tree::SparseMerkleTree, H256, PaddedKey};
+use sparse_merkle_tree::{
+    blake2b::Blake2bHasher, default_store::DefaultStore, tree::SparseMerkleTree, PaddedKey, H256,
+};
 
 const TARGET_LEAVES_COUNT: usize = 20;
 
@@ -76,7 +78,9 @@ fn bench(c: &mut Criterion) {
             .unwrap();
         let root = smt.root();
         b.iter(|| {
-            let valid = proof.clone().verify::<Blake2bHasher, 32>(root, leaves.clone());
+            let valid = proof
+                .clone()
+                .verify::<Blake2bHasher, 32>(root, leaves.clone());
             assert!(valid.expect("verify result"));
         });
     });
