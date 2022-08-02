@@ -1,7 +1,7 @@
 default: fmt clippy test bench-test check
 
 test:
-	cargo test --all --features "std blake2b" && cargo test --features utf8-keys -- --skip tests
+	cargo test --all --features "std blake2b borsh" && cargo test --features "borsh utf8-keys" -- --skip tests
 
 bench-test:
 	cargo bench -- --test

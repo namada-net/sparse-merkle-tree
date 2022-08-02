@@ -1,12 +1,18 @@
 use crate::H256;
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use core::convert::TryFrom;
+#[cfg(feature = "borsh")]
+use core::convert::TryInto;
 use core::ops::{Deref, DerefMut};
 use std::fmt::Debug;
+#[cfg(feature = "borsh")]
+use std::io::Write;
 
 /// Represents bytes that have been right padded with zeros to be
 /// an `N`-length byte array.
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Copy, PartialOrd, Ord)]
-//#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct PaddedKey<const N: usize> {
     padded: Key<N>,
     #[cfg(not(feature = "utf8-keys"))]
@@ -48,8 +54,27 @@ impl<const N: usize> PaddedKey<N> {
 
 /// The actual key value used in the tree
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Copy, PartialOrd, Ord)]
-//#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct Key<const N: usize>([u8; N]);
+
+#[cfg(feature = "borsh")]
+impl<const N: usize> BorshSerialize for Key<N> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let bytes = self.0.to_vec();
+        BorshSerialize::serialize(&bytes, writer)
+    }
+}
+
+#[cfg(feature = "borsh")]
+impl<const N: usize> BorshDeserialize for Key<N> {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        use std::io::ErrorKind;
+        let bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+        let bytes: [u8; N] = bytes.try_into().map_err(|_|
+            std::io::Error::new(ErrorKind::InvalidData, "Input byte vector is too large")
+        )?;
+        Ok(Key(bytes))
+    }
+}
 
 const BYTE_SIZE: usize = 8;
 
