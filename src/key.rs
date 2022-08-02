@@ -1,6 +1,7 @@
 use crate::H256;
 use core::convert::TryFrom;
 use core::ops::{Deref, DerefMut};
+use std::fmt::Debug;
 
 /// Represents bytes that have been right padded with zeros to be
 /// an `N`-length byte array.
@@ -8,6 +9,7 @@ use core::ops::{Deref, DerefMut};
 //#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct PaddedKey<const N: usize> {
     padded: Key<N>,
+    #[cfg(not(feature = "utf8-keys"))]
     length: usize,
 }
 
@@ -26,6 +28,19 @@ impl<const N: usize> DerefMut for PaddedKey<N> {
 }
 
 impl<const N: usize> PaddedKey<N> {
+    #[cfg(feature = "utf8-keys")]
+    pub fn as_slice(&self) -> &[u8] {
+        let length = self.padded
+            .0
+            .iter()
+            .enumerate()
+            .find(|(_, x) | **x == 0xFF as u8)
+            .map(|val | val.0)
+            .unwrap_or_else(|| self.padded.0.len());
+        &self.padded.0[..length]
+    }
+
+    #[cfg(not(feature = "utf8-keys"))]
     pub fn as_slice(&self) -> &[u8] {
         &self.padded.0[..self.length]
     }
@@ -159,12 +174,21 @@ impl<const N: usize> TryFrom<Vec<u8>> for PaddedKey<N> {
         if v.len() > N {
             Err("Byte vector is too large to be a key".into())
         } else {
-            let mut padded = [0u8; N];
+            let mut padded = [0xFF as u8; N];
             padded[..v.len()].copy_from_slice(&v);
-            Ok(PaddedKey {
-                padded: Key::<N>(padded),
-                length: v.len(),
-            })
+            #[cfg(feature = "utf8-keys")]
+            {
+                Ok(PaddedKey {
+                    padded: Key::<N>(padded),
+                })
+            }
+            #[cfg(not(feature = "utf8-keys"))]
+            {
+                Ok(PaddedKey {
+                    padded: Key::<N>(padded),
+                    length: v.len()
+                })
+            }
         }
     }
 }
@@ -183,9 +207,34 @@ impl From<H256> for PaddedKey<32> {
 
 impl<const N: usize> From<[u8; N]> for PaddedKey<N> {
     fn from(v: [u8; N]) -> Self {
-        PaddedKey {
-            padded: Key::<N>(v),
-            length: N,
+        #[cfg(feature = "utf8-keys")]
+        {
+            PaddedKey {
+                padded: Key::<N>(v),
+            }
         }
+        #[cfg(not(feature = "utf8-keys"))]
+        {
+            PaddedKey {
+                padded: Key::<N>(v),
+                length: N,
+            }
+        }
+    }
+}
+
+#[cfg(all(test, feature="utf8-keys"))]
+mod test_keys {
+    use super::*;
+
+    #[test]
+    fn test_padded_key_from_utf8() {
+        let ibc_key = "clients/tendermint-0/clientState".as_bytes().to_vec();
+        let key = PaddedKey::<120>::try_from(ibc_key.clone()).expect("Test failed");
+        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
+        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
+        let key = PaddedKey::<32>::try_from(ibc_key).expect("Test failed");
+        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
+        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
     }
 }

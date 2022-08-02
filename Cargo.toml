@@ -12,6 +12,7 @@ version = "0.3.1-pre"
 [features]
 blake2b = ["blake2b-rs"]
 default = ["std", "blake2b"]
+utf8-keys = ["std"]
 std = []
 
 [dependencies]
