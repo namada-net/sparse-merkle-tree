@@ -102,8 +102,8 @@ fn test_merkle_root() {
     }
 
     let expected_root: H256 = [
-        127, 38, 228, 5, 244, 188, 152, 184, 33, 46, 216, 189, 56, 138, 130, 58, 195, 127,
-        160, 3, 183, 213, 146, 114, 252, 231, 22, 255, 217, 195, 246, 116
+        53, 6, 166, 103, 176, 25, 32, 25, 11, 238, 105, 12, 97, 160, 103, 70, 170, 35, 89, 138, 68,
+        83, 84, 45, 133, 246, 181, 201, 166, 57, 150, 17,
     ]
     .into();
     assert_eq!(tree.store().leaves_map().len(), 9);
@@ -334,17 +334,20 @@ proptest! {
     }
 
     #[test]
-    fn test_padded_key_copy_bits(start in 0usize..318usize, size in 1usize..319usize) {
+    fn test_padded_key_copy_bits(start in 0usize..319usize, size in 1usize..319usize) {
         let one: PaddedKey<40> = [255u8; 40].into();
         let target = one.copy_bits(start..(start.saturating_add(size)));
         for i in start..start.saturating_add(size) {
+            if i >= 320 {
+                continue;
+            }
             assert_eq!(one.get_bit(i), target.get_bit(i));
         }
         for i in 0..start {
             assert!(!target.get_bit(i));
         }
         if let Some(start_i) = start.checked_add(size).and_then(|i| i.checked_add(1)){
-            for i in start_i..=320 {
+            for i in start_i..320 {
                 assert!(!target.get_bit(i));
             }
         }
@@ -382,7 +385,7 @@ proptest! {
     }
 
     #[test]
-    fn test_smt_single_leaf_large((pairs, _n) in leaves(50, 100)){
+    fn test_smt_single_leaf_large((pairs, _n) in leaves(50, 100)) {
         let smt = new_smt::<29>(pairs.clone());
         for (k, v) in pairs {
             let proof = smt.merkle_proof(vec![k]).expect("gen proof");
@@ -405,12 +408,18 @@ proptest! {
     #[test]
     fn test_smt_multi_leaves_large((pairs, _n) in leaves(50, 100)){
         let n = 20;
-        let smt = new_smt::<29>(pairs.clone());
+        let pairs: Vec<_> = pairs
+            .into_iter()
+            .map(|(key, v)| (
+            PaddedKey::<120>::try_from(key.as_slice().to_vec()).unwrap(),
+            v))
+            .collect();
+        let smt = new_smt::<120>(pairs.clone());
         let proof = smt.merkle_proof(pairs.iter().take(n).map(|(k, _v)| *k).collect()).expect("gen proof");
-        let data: Vec<(PaddedKey<29>, H256)> = pairs.into_iter().take(n).collect();
+        let data: Vec<(PaddedKey<120>, H256)> = pairs.into_iter().take(n).collect();
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
-        assert!(proof.verify::<Blake2bHasher, 29>(smt.root(), data.clone()).expect("verify proof"));
-        assert!(compiled_proof.verify::<Blake2bHasher, 29>(smt.root(), data).expect("verify compiled proof"));
+        assert!(proof.verify::<Blake2bHasher, 120>(smt.root(), data.clone()).expect("verify proof"));
+        assert!(compiled_proof.verify::<Blake2bHasher, 120>(smt.root(), data).expect("verify compiled proof"));
     }
 
     #[test]
@@ -546,7 +555,7 @@ fn test_v0_2_broken_sample() {
         "6d5257204ebe7d88fd91ae87941cb2dd9d8062b64ae5a2bd2d28ec40b9fbf6df",
     ]
     .into_iter()
-    .map(|key|parse_h256(key).into());
+    .map(|key| parse_h256(key).into());
     let values = vec![
         "000000000000000000000000c8328aabcd9b9e8e64fbc566c4385c3bdeb219d7",
         "000000000000000000000001c8328aabcd9b9e8e64fbc566c4385c3bdeb219d7",
@@ -562,10 +571,7 @@ fn test_v0_2_broken_sample() {
     ]
     .into_iter()
     .map(parse_h256);
-    let mut pairs = keys
-        .into_iter()
-        .zip(values.into_iter())
-        .collect::<Vec<_>>();
+    let mut pairs = keys.into_iter().zip(values.into_iter()).collect::<Vec<_>>();
     let smt = new_smt::<32>(pairs.clone());
     let base_root = *smt.root();
 
@@ -586,8 +592,8 @@ fn test_v0_3_broken_sample() {
         0, 0,
     ];
     let v1 = [
-        108u8, 153, 9, 238, 15, 28, 173, 182, 146, 77, 52, 203, 162, 151, 125, 76, 55, 176, 192, 104,
-        170, 5, 193, 174, 137, 255, 169, 176, 132, 64, 199, 115,
+        108u8, 153, 9, 238, 15, 28, 173, 182, 146, 77, 52, 203, 162, 151, 125, 76, 55, 176, 192,
+        104, 170, 5, 193, 174, 137, 255, 169, 176, 132, 64, 199, 115,
     ];
     let k2 = [
         1u8, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

@@ -6,7 +6,7 @@ use crate::{
     proof_ics23,
     traits::{Hasher, Store, Value},
     vec::Vec,
-    Key, PaddedKey, EXPECTED_PATH_SIZE, H256, TREE_HEIGHT,
+    Key, PaddedKey, EXPECTED_PATH_SIZE, H256,
 };
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -124,11 +124,21 @@ where
             if branch_node.fork_height > 0 {
                 self.store.remove_branch(&node)?;
             }
-            if node == branch_node.node {
-                break;
-            }
-            node = branch_node.node;
-            let sibling = branch_node.sibling;
+            let (left, right) = branch_node.branch(height);
+            let is_right = key.get_bit(height);
+            let sibling = if is_right {
+                if &node == right {
+                    break;
+                }
+                node = *right;
+                *left
+            } else {
+                if &node == left {
+                    break;
+                }
+                node = *left;
+                *right
+            };
             path.insert(height, sibling);
             // get next branch and fork_height
             branch = self.store.get_branch(&node)?;
@@ -203,7 +213,9 @@ where
                     break;
                 }
             };
-            node = branch_node.node;
+            let is_right = key.get_bit(branch_node.fork_height);
+            let (left, right) = branch_node.branch(branch_node.fork_height);
+            node = if is_right { *right } else { *left };
             if branch_node.fork_height == 0 {
                 break;
             }
@@ -257,15 +269,23 @@ where
                         }
                         break;
                     }
-
+                    let (left, right) = branch_node.branch(height);
                     let is_right = key.get_bit(height);
-                    if node == branch_node.node {
-                        break;
-                    }
-                    node = branch_node.node;
-                    let sibling = branch_node.sibling;
+                    let sibling = if is_right {
+                        if &node == right {
+                            break;
+                        }
+                        node = *right;
+                        *left
+                    } else {
+                        if &node == left {
+                            break;
+                        }
+                        node = *left;
+                        *right
+                    };
                     let mut sibling_key = key.parent_path(height);
-                    if is_right {
+                    if !is_right {
                         // mark sibling's index, sibling on the right path.
                         sibling_key.set_bit(height);
                     };
@@ -289,7 +309,7 @@ where
         }
 
         // sort keys
-        keys.sort_unstable();
+        keys.sort_unstable_by_key(|k| **k);
 
         // fetch all merkle path
         let mut cache: BTreeMap<(usize, _), H256> = Default::default();
@@ -313,10 +333,10 @@ where
             .collect();
 
         while let Some((key, height, leaf_index)) = queue.pop_front() {
-            if queue.is_empty() && cache.is_empty() || height == TREE_HEIGHT {
+            if queue.is_empty() && cache.is_empty() || height == 8 * N {
                 // tree only contains one leaf
                 if leaves_path[leaf_index].is_empty() {
-                    leaves_path[leaf_index].push(8 * N);
+                    leaves_path[leaf_index].push((8 * N) - 1);
                 }
                 break;
             }
@@ -342,7 +362,7 @@ where
             } else {
                 match cache.remove(&(height, sibling_key)) {
                     Some(sibling) => {
-                        debug_assert!(height <= 8 * N);
+                        debug_assert!(height < 8 * N);
                         // save first non-zero sibling's height for leaves
                         proof.push((sibling, height));
                     }
@@ -359,7 +379,7 @@ where
             }
             // find new non-zero sibling, append to leaf's path
             leaves_path[leaf_index].push(height);
-            if height < TREE_HEIGHT {
+            if height < 8 * N {
                 // get parent_key, which k.get_bit(height) is false
                 let parent_key = if is_right { sibling_key } else { key };
                 queue.push_back((parent_key, height + 1, leaf_index));

@@ -1,6 +1,4 @@
 use crate::H256;
-#[cfg(feature = "borsh")]
-use borsh::{BorshDeserialize, BorshSerialize};
 use core::convert::TryFrom;
 use core::ops::{Deref, DerefMut};
 
@@ -55,6 +53,9 @@ impl<const N: usize> Key<N> {
 
     #[inline]
     pub fn get_bit(&self, i: usize) -> bool {
+        if i / BYTE_SIZE > Self::max_index() {
+            println!("Hey");
+        }
         let byte_pos = Self::max_index() - i / BYTE_SIZE;
         let bit_pos = i % BYTE_SIZE;
         let bit = self.0[byte_pos] >> bit_pos & 1;
@@ -184,7 +185,7 @@ impl<const N: usize> From<[u8; N]> for PaddedKey<N> {
     fn from(v: [u8; N]) -> Self {
         PaddedKey {
             padded: Key::<N>(v),
-            length: N
+            length: N,
         }
     }
 }

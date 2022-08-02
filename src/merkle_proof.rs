@@ -153,7 +153,7 @@ impl MerkleProof {
         let mut proof: VecDeque<_> = proof.into();
 
         // sort leaves
-        leaves.sort_unstable_by_key(|(k, _v)| *k);
+        leaves.sort_unstable_by_key(|(k, _v)| **k);
         // tree_buf: (height, key) -> (key_index, node)
         let mut tree_buf: BTreeMap<_, _> = leaves
             .into_iter()
@@ -168,7 +168,7 @@ impl MerkleProof {
 
             if proof.is_empty() && tree_buf.is_empty() {
                 return Ok(node);
-            } else if height == TREE_HEIGHT {
+            } else if height == 8 * N {
                 if !proof.is_empty() {
                     return Err(Error::CorruptedProof);
                 }
