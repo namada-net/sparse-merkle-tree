@@ -16,6 +16,7 @@ pub enum Error {
     NonMergableRange,
     ExistenceProof,
     NonExistenceProof,
+    KeyTooLarge,
 }
 
 impl core::fmt::Display for Error {
@@ -60,6 +61,9 @@ impl core::fmt::Display for Error {
             }
             Error::NonExistenceProof => {
                 write!(f, "Try to get NonExistenceProof for the existing value")?;
+            }
+            Error::KeyTooLarge => {
+                write!(f, "Provided key has too many bytes")?;
             }
         }
         Ok(())

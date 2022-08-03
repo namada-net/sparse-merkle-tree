@@ -2,7 +2,6 @@ use crate::H256;
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::convert::TryFrom;
-#[cfg(feature = "borsh")]
 use core::convert::TryInto;
 use core::ops::{Deref, DerefMut};
 use std::fmt::Debug;
@@ -36,12 +35,13 @@ impl<const N: usize> DerefMut for PaddedKey<N> {
 impl<const N: usize> PaddedKey<N> {
     #[cfg(feature = "utf8-keys")]
     pub fn as_slice(&self) -> &[u8] {
-        let length = self.padded
+        let length = self
+            .padded
             .0
             .iter()
             .enumerate()
-            .find(|(_, x) | **x == 0xFF as u8)
-            .map(|val | val.0)
+            .find(|(_, x)| **x == 0xFF_u8)
+            .map(|val| val.0)
             .unwrap_or_else(|| self.padded.0.len());
         &self.padded.0[..length]
     }
@@ -69,9 +69,9 @@ impl<const N: usize> BorshDeserialize for Key<N> {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         use std::io::ErrorKind;
         let bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
-        let bytes: [u8; N] = bytes.try_into().map_err(|_|
+        let bytes: [u8; N] = bytes.try_into().map_err(|_| {
             std::io::Error::new(ErrorKind::InvalidData, "Input byte vector is too large")
-        )?;
+        })?;
         Ok(Key(bytes))
     }
 }
@@ -194,12 +194,12 @@ impl<const N: usize> Key<N> {
 }
 
 impl<const N: usize> TryFrom<Vec<u8>> for PaddedKey<N> {
-    type Error = String;
-    fn try_from(v: Vec<u8>) -> Result<Self, String> {
+    type Error = crate::error::Error;
+    fn try_from(v: Vec<u8>) -> Result<Self, Self::Error> {
         if v.len() > N {
-            Err("Byte vector is too large to be a key".into())
+            Err(crate::error::Error::KeyTooLarge)
         } else {
-            let mut padded = [0xFF as u8; N];
+            let mut padded = [0xFF_u8; N];
             padded[..v.len()].copy_from_slice(&v);
             #[cfg(feature = "utf8-keys")]
             {
@@ -211,7 +211,7 @@ impl<const N: usize> TryFrom<Vec<u8>> for PaddedKey<N> {
             {
                 Ok(PaddedKey {
                     padded: Key::<N>(padded),
-                    length: v.len()
+                    length: v.len(),
                 })
             }
         }
@@ -248,13 +248,32 @@ impl<const N: usize> From<[u8; N]> for PaddedKey<N> {
     }
 }
 
-#[cfg(all(test, feature="utf8-keys"))]
+impl<const N: usize> TryFrom<String> for PaddedKey<N> {
+    type Error = crate::error::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.as_bytes().to_vec().try_into()
+    }
+}
+
+#[cfg(all(test, feature = "utf8-keys"))]
 mod test_keys {
     use super::*;
 
     #[test]
     fn test_padded_key_from_utf8() {
         let ibc_key = "clients/tendermint-0/clientState".as_bytes().to_vec();
+        let key = PaddedKey::<120>::try_from(ibc_key.clone()).expect("Test failed");
+        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
+        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
+        let key = PaddedKey::<32>::try_from(ibc_key).expect("Test failed");
+        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
+        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
+    }
+
+    #[test]
+    fn test_padded_key_from_string() {
+        let ibc_key = "clients/tendermint-0/clientState".to_string();
         let key = PaddedKey::<120>::try_from(ibc_key.clone()).expect("Test failed");
         let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
         assert_eq!(value, String::from("clients/tendermint-0/clientState"));
