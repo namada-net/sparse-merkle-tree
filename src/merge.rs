@@ -1,6 +1,6 @@
 use crate::h256::H256;
 use crate::traits::Hasher;
-use crate::PaddedKey;
+use crate::Key;
 
 /// Merge two hash
 /// this function optimized for ZERO_HASH
@@ -19,13 +19,16 @@ pub fn merge<H: Hasher + Default>(lhs: &H256, rhs: &H256) -> H256 {
 
 /// hash_leaf = hash(prefix | key | value)
 /// zero value represent delete the key, this function return zero for zero value
-pub fn hash_leaf<H: Hasher + Default, const N: usize>(key: &PaddedKey<N>, value: &H256) -> H256 {
+pub fn hash_leaf<H: Hasher + Default, K, const N: usize>(key: &K, value: &H256) -> H256
+where
+    K: Key<N>,
+{
     if value.is_zero() {
         return H256::zero();
     }
     let mut hasher = H::default();
     hasher.write_bytes(H256::zero().as_slice());
-    hasher.write_bytes(key.as_slice());
+    hasher.write_bytes(&key.to_vec());
     hasher.write_bytes(value.as_slice());
     hasher.finish()
 }

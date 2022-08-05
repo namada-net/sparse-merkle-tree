@@ -6,7 +6,7 @@ use crate::{
     proof_ics23,
     traits::{Hasher, Store, Value},
     vec::Vec,
-    Key, PaddedKey, EXPECTED_PATH_SIZE, H256,
+    Key, TreeKey, EXPECTED_PATH_SIZE, H256,
 };
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -17,14 +17,20 @@ use ics23::{CommitmentProof, NonExistenceProof};
 /// A branch in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct BranchNode<const N: usize> {
+pub struct BranchNode<K, const N: usize>
+where
+    K: Key<N>,
+{
     pub fork_height: usize,
-    pub key: PaddedKey<N>,
+    pub key: K,
     pub node: H256,
     pub sibling: H256,
 }
 
-impl<const N: usize> BranchNode<N> {
+impl<K, const N: usize> BranchNode<K, N>
+where
+    K: Key<N>,
+{
     fn branch(&self, height: usize) -> (&H256, &H256) {
         let is_right = self.key.get_bit(height);
         if is_right {
@@ -38,32 +44,49 @@ impl<const N: usize> BranchNode<N> {
 /// A leaf in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct LeafNode<V, const N: usize> {
-    pub key: PaddedKey<N>,
+pub struct LeafNode<K, V, const N: usize>
+where
+    K: Key<N>,
+{
+    pub key: K,
     pub value: V,
 }
 
 /// Sparse merkle tree
-#[derive(Default, Debug)]
-pub struct SparseMerkleTree<H, V, S, const N: usize>
+#[derive(Debug)]
+pub struct SparseMerkleTree<H, K, V, S, const N: usize>
 where
     H: Hasher + Default,
+    K: Key<N>,
     V: Value,
-    S: Store<V, N>,
+    S: Store<K, V, N>,
 {
     store: S,
     root: H256,
-    phantom: PhantomData<(H, V)>,
+    phantom: PhantomData<(H, K, V)>,
 }
 
-impl<H, V, S, const N: usize> SparseMerkleTree<H, V, S, N>
+impl<H, K, V, S, const N: usize> Default for SparseMerkleTree<H, K, V, S, N>
 where
     H: Hasher + Default,
+    K: Key<N>,
     V: Value + core::cmp::PartialEq,
-    S: Store<V, N>,
+    S: Store<K, V, N>,
+{
+    fn default() -> Self {
+        Self::new(H256::default(), S::default())
+    }
+}
+
+impl<H, K, V, S, const N: usize> SparseMerkleTree<H, K, V, S, N>
+where
+    H: Hasher + Default,
+    K: Key<N>,
+    V: Value + core::cmp::PartialEq,
+    S: Store<K, V, N>,
 {
     /// Build a merkle tree from root and store
-    pub fn new(root: H256, store: S) -> SparseMerkleTree<H, V, S, N> {
+    pub fn new(root: H256, store: S) -> SparseMerkleTree<H, K, V, S, N> {
         SparseMerkleTree {
             root,
             store,
@@ -98,7 +121,7 @@ where
 
     /// Update a leaf, return new merkle root
     /// set to zero value to delete a key
-    pub fn update(&mut self, key: PaddedKey<N>, value: V) -> Result<&H256> {
+    pub fn update(&mut self, key: K, value: V) -> Result<&H256> {
         // store the path, sparse index will ignore zero members
         let mut path: BTreeMap<_, _> = Default::default();
         // walk path from top to bottom
@@ -155,7 +178,7 @@ where
         }
 
         // compute and store new leaf
-        let mut node = hash_leaf::<H, N>(&key, &value.to_h256());
+        let mut node = hash_leaf::<H, K, N>(&key, &value.to_h256());
         // notice when value is zero the leaf is deleted, so we do not need to store it
         if !node.is_zero() {
             self.store.insert_leaf(node, LeafNode { key, value })?;
@@ -203,7 +226,7 @@ where
 
     /// Get value of a leaf
     /// return zero value if leaf not exists
-    pub fn get(&self, key: &PaddedKey<N>) -> Result<V> {
+    pub fn get(&self, key: &K) -> Result<V> {
         let mut node = self.root;
         // children must equals to zero when parent equals to zero
         while !node.is_zero() {
@@ -236,8 +259,8 @@ where
     /// cache: (height, key) -> node
     fn fetch_merkle_path(
         &self,
-        key: &PaddedKey<N>,
-        cache: &mut BTreeMap<(usize, Key<N>), H256>,
+        key: &K,
+        cache: &mut BTreeMap<(usize, TreeKey<N>), H256>,
     ) -> Result<()> {
         let mut node = self.root;
         let mut height = self
@@ -303,7 +326,7 @@ where
     }
 
     /// Generate merkle proof
-    pub fn merkle_proof(&self, mut keys: Vec<PaddedKey<N>>) -> Result<MerkleProof> {
+    pub fn merkle_proof(&self, mut keys: Vec<K>) -> Result<MerkleProof> {
         if keys.is_empty() {
             return Err(Error::EmptyKeys);
         }
@@ -390,7 +413,7 @@ where
     }
 
     /// Generate ICS 23 commitment proof for the existing key
-    pub fn membership_proof(&self, key: &PaddedKey<N>) -> Result<CommitmentProof> {
+    pub fn membership_proof(&self, key: &K) -> Result<CommitmentProof> {
         let value = self.get(key)?;
         if value == V::zero() {
             return Err(Error::ExistenceProof);
@@ -404,7 +427,7 @@ where
     }
 
     /// Generate ICS 23 commitment proof for the non-existing key
-    pub fn non_membership_proof(&self, key: &PaddedKey<N>) -> Result<CommitmentProof> {
+    pub fn non_membership_proof(&self, key: &K) -> Result<CommitmentProof> {
         let value = self.get(key)?;
         if value != V::zero() {
             return Err(Error::NonExistenceProof);
@@ -472,7 +495,7 @@ where
             }
         }
         let proof = NonExistenceProof {
-            key: key.as_slice().to_vec(),
+            key: key.to_vec(),
             left,
             right,
         };

@@ -17,6 +17,7 @@ pub enum Error {
     ExistenceProof,
     NonExistenceProof,
     KeyTooLarge,
+    ForbiddenKey,
 }
 
 impl core::fmt::Display for Error {
@@ -64,6 +65,9 @@ impl core::fmt::Display for Error {
             }
             Error::KeyTooLarge => {
                 write!(f, "Provided key has too many bytes")?;
+            }
+            Error::ForbiddenKey => {
+                write!(f, "Provided a key with invalid utf8 characters")?;
             }
         }
         Ok(())

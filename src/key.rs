@@ -1,63 +1,41 @@
-use crate::H256;
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
-use core::convert::TryFrom;
+#[cfg(feature = "borsh")]
 use core::convert::TryInto;
+use core::hash::Hash;
 use core::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 #[cfg(feature = "borsh")]
 use std::io::Write;
 
-/// Represents bytes that have been right padded with zeros to be
-/// an `N`-length byte array.
-#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy, PartialOrd, Ord)]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct PaddedKey<const N: usize> {
-    padded: Key<N>,
-    #[cfg(not(feature = "utf8-keys"))]
-    length: usize,
-}
-
-impl<const N: usize> Deref for PaddedKey<N> {
-    type Target = Key<N>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.padded
-    }
-}
-
-impl<const N: usize> DerefMut for PaddedKey<N> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.padded
-    }
-}
-
-impl<const N: usize> PaddedKey<N> {
-    #[cfg(feature = "utf8-keys")]
-    pub fn as_slice(&self) -> &[u8] {
-        let length = self
-            .padded
-            .0
-            .iter()
-            .enumerate()
-            .find(|(_, x)| **x == 0xFF_u8)
-            .map(|val| val.0)
-            .unwrap_or_else(|| self.padded.0.len());
-        &self.padded.0[..length]
-    }
-
-    #[cfg(not(feature = "utf8-keys"))]
-    pub fn as_slice(&self) -> &[u8] {
-        &self.padded.0[..self.length]
-    }
+/// This trait is map keys to / from the users key space into a finite
+/// key space used internally. This space is the set of all N-byte arrays
+/// where N < 2^32
+pub trait Key<const N: usize>:
+    Eq + PartialEq + Copy + Clone + Hash + Deref<Target = TreeKey<N>> + DerefMut<Target = TreeKey<N>>
+{
+    /// The error type for failed mappings
+    type Error;
+    /// This should map from the internal key space
+    /// back into the user's key space
+    fn to_vec(&self) -> Vec<u8>;
+    /// This should map from the user's key space into
+    /// the internal keyspace
+    fn try_from_bytes(bytes: &[u8]) -> Result<Self, Self::Error>;
 }
 
 /// The actual key value used in the tree
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct Key<const N: usize>([u8; N]);
+pub struct TreeKey<const N: usize>([u8; N]);
+
+impl<const N: usize> TreeKey<N> {
+    pub fn new(array: [u8; N]) -> Self {
+        Self(array)
+    }
+}
 
 #[cfg(feature = "borsh")]
-impl<const N: usize> BorshSerialize for Key<N> {
+impl<const N: usize> BorshSerialize for TreeKey<N> {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let bytes = self.0.to_vec();
         BorshSerialize::serialize(&bytes, writer)
@@ -65,30 +43,26 @@ impl<const N: usize> BorshSerialize for Key<N> {
 }
 
 #[cfg(feature = "borsh")]
-impl<const N: usize> BorshDeserialize for Key<N> {
+impl<const N: usize> BorshDeserialize for TreeKey<N> {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         use std::io::ErrorKind;
         let bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
         let bytes: [u8; N] = bytes.try_into().map_err(|_| {
             std::io::Error::new(ErrorKind::InvalidData, "Input byte vector is too large")
         })?;
-        Ok(Key(bytes))
+        Ok(TreeKey(bytes))
     }
 }
 
 const BYTE_SIZE: usize = 8;
 
-impl<const N: usize> Key<N> {
+impl<const N: usize> TreeKey<N> {
     pub const fn zero() -> Self {
-        Key([0u8; N])
+        TreeKey([0u8; N])
     }
 
     pub const fn max_index() -> usize {
         N - 1
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self == &Self::zero()
     }
 
     #[inline]
@@ -116,14 +90,10 @@ impl<const N: usize> Key<N> {
         self.0[byte_pos as usize] &= !((1 << bit_pos) as u8);
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        &self.0[..]
-    }
-
-    /// Treat Key as a path in a tree
+    /// Treat TreeKey as a path in a tree
     /// fork height is the number of common bits(from higher to lower)
-    /// of two Key
-    pub fn fork_height(&self, key: &Key<N>) -> usize {
+    /// of two TreeKey
+    pub fn fork_height(&self, key: &TreeKey<N>) -> usize {
         let max = (BYTE_SIZE * N) as usize;
         for h in (0..max).rev() {
             if self.get_bit(h) != key.get_bit(h) {
@@ -133,22 +103,22 @@ impl<const N: usize> Key<N> {
         0
     }
 
-    /// Treat Key as a path in a tree
+    /// Treat TreeKey as a path in a tree
     /// return parent_path of self
     pub fn parent_path(&self, height: usize) -> Self {
         height
             .checked_add(1)
             .map(|i| self.copy_bits(i..))
-            .unwrap_or_else(Key::zero)
+            .unwrap_or_else(TreeKey::zero)
     }
 
-    /// Copy bits and return a new Key
+    /// Copy bits and return a new TreeKey
     pub fn copy_bits(&self, range: impl core::ops::RangeBounds<usize>) -> Self {
         let array_size = N;
         let max = 8 * N;
         use core::ops::Bound;
 
-        let mut target = Key::zero();
+        let mut target = TreeKey::zero();
         let start = match range.start_bound() {
             Bound::Included(&i) => i as usize,
             Bound::Excluded(&i) => panic!("do not allows excluded start: {}", i),
@@ -193,92 +163,14 @@ impl<const N: usize> Key<N> {
     }
 }
 
-impl<const N: usize> TryFrom<Vec<u8>> for PaddedKey<N> {
-    type Error = crate::error::Error;
-    fn try_from(v: Vec<u8>) -> Result<Self, Self::Error> {
-        if v.len() > N {
-            Err(crate::error::Error::KeyTooLarge)
-        } else {
-            let mut padded = [0xFF_u8; N];
-            padded[..v.len()].copy_from_slice(&v);
-            #[cfg(feature = "utf8-keys")]
-            {
-                Ok(PaddedKey {
-                    padded: Key::<N>(padded),
-                })
-            }
-            #[cfg(not(feature = "utf8-keys"))]
-            {
-                Ok(PaddedKey {
-                    padded: Key::<N>(padded),
-                    length: v.len(),
-                })
-            }
-        }
-    }
-}
-
-impl<const N: usize> From<PaddedKey<N>> for [u8; N] {
-    fn from(key: PaddedKey<N>) -> [u8; N] {
-        key.padded.0
-    }
-}
-
-impl From<H256> for PaddedKey<32> {
-    fn from(v: H256) -> Self {
-        <[u8; 32]>::from(v).into()
-    }
-}
-
-impl<const N: usize> From<[u8; N]> for PaddedKey<N> {
+impl<const N: usize> From<[u8; N]> for TreeKey<N> {
     fn from(v: [u8; N]) -> Self {
-        #[cfg(feature = "utf8-keys")]
-        {
-            PaddedKey {
-                padded: Key::<N>(v),
-            }
-        }
-        #[cfg(not(feature = "utf8-keys"))]
-        {
-            PaddedKey {
-                padded: Key::<N>(v),
-                length: N,
-            }
-        }
+        Self::new(v)
     }
 }
 
-impl<const N: usize> TryFrom<String> for PaddedKey<N> {
-    type Error = crate::error::Error;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        value.as_bytes().to_vec().try_into()
-    }
-}
-
-#[cfg(all(test, feature = "utf8-keys"))]
-mod test_keys {
-    use super::*;
-
-    #[test]
-    fn test_padded_key_from_utf8() {
-        let ibc_key = "clients/tendermint-0/clientState".as_bytes().to_vec();
-        let key = PaddedKey::<120>::try_from(ibc_key.clone()).expect("Test failed");
-        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
-        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
-        let key = PaddedKey::<32>::try_from(ibc_key).expect("Test failed");
-        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
-        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
-    }
-
-    #[test]
-    fn test_padded_key_from_string() {
-        let ibc_key = "clients/tendermint-0/clientState".to_string();
-        let key = PaddedKey::<120>::try_from(ibc_key.clone()).expect("Test failed");
-        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
-        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
-        let key = PaddedKey::<32>::try_from(ibc_key).expect("Test failed");
-        let value = String::from_utf8(key.as_slice().to_vec()).expect("Test failed");
-        assert_eq!(value, String::from("clients/tendermint-0/clientState"));
+impl<const N: usize> From<TreeKey<N>> for [u8; N] {
+    fn from(v: TreeKey<N>) -> Self {
+        v.0
     }
 }

@@ -12,7 +12,6 @@ version = "0.3.1-pre"
 [features]
 blake2b = ["blake2b-rs"]
 default = ["std", "blake2b"]
-utf8-keys = ["std"]
 std = []
 
 [dependencies]
@@ -27,7 +26,3 @@ criterion = "0.3.4"
 hex = "0.4"
 proptest = "1.0.0"
 rand = "0.8.3"
-
-[[bench]]
-harness = false
-name = "smt_benchmark"

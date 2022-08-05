@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
     tree::{BranchNode, LeafNode},
-    H256,
+    Key, H256,
 };
 
 /// Trait for customize hash function
@@ -29,12 +29,14 @@ impl Value for H256 {
 }
 
 /// Trait for customize backend storage
-/// TODO: Decide if we should look up Key or padded key
-pub trait Store<V, const N: usize> {
-    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode<N>>, Error>;
-    fn get_leaf(&self, leaf_key: &H256) -> Result<Option<LeafNode<V, N>>, Error>;
-    fn insert_branch(&mut self, node: H256, branch: BranchNode<N>) -> Result<(), Error>;
-    fn insert_leaf(&mut self, leaf_key: H256, leaf: LeafNode<V, N>) -> Result<(), Error>;
+pub trait Store<K, V, const N: usize>: Default
+where
+    K: Key<N>,
+{
+    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode<K, N>>, Error>;
+    fn get_leaf(&self, leaf_key: &H256) -> Result<Option<LeafNode<K, V, N>>, Error>;
+    fn insert_branch(&mut self, node: H256, branch: BranchNode<K, N>) -> Result<(), Error>;
+    fn insert_leaf(&mut self, leaf_key: H256, leaf: LeafNode<K, V, N>) -> Result<(), Error>;
     fn remove_branch(&mut self, node: &H256) -> Result<(), Error>;
     fn remove_leaf(&mut self, leaf_key: &H256) -> Result<(), Error>;
 }

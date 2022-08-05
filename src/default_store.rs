@@ -3,23 +3,41 @@ use crate::{
     error::Error,
     traits::Store,
     tree::{BranchNode, LeafNode},
-    H256,
+    Key, H256,
 };
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-pub struct DefaultStore<V, const N: usize> {
-    branches_map: Map<H256, BranchNode<N>>,
-    leaves_map: Map<H256, LeafNode<V, N>>,
+pub struct DefaultStore<K, V, const N: usize>
+where
+    K: Key<N>,
+{
+    branches_map: Map<H256, BranchNode<K, N>>,
+    leaves_map: Map<H256, LeafNode<K, V, N>>,
 }
 
-impl<V, const N: usize> DefaultStore<V, N> {
-    pub fn branches_map(&self) -> &Map<H256, BranchNode<N>> {
+impl<K, V, const N: usize> Default for DefaultStore<K, V, N>
+where
+    K: Key<N>,
+{
+    fn default() -> Self {
+        Self {
+            branches_map: Map::new(),
+            leaves_map: Map::new(),
+        }
+    }
+}
+
+impl<K, V, const N: usize> DefaultStore<K, V, N>
+where
+    K: Key<N>,
+{
+    pub fn branches_map(&self) -> &Map<H256, BranchNode<K, N>> {
         &self.branches_map
     }
-    pub fn leaves_map(&self) -> &Map<H256, LeafNode<V, N>> {
+    pub fn leaves_map(&self) -> &Map<H256, LeafNode<K, V, N>> {
         &self.leaves_map
     }
     pub fn clear(&mut self) {
@@ -28,18 +46,21 @@ impl<V, const N: usize> DefaultStore<V, N> {
     }
 }
 
-impl<V: Clone, const N: usize> Store<V, N> for DefaultStore<V, N> {
-    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode<N>>, Error> {
+impl<K, V: Clone, const N: usize> Store<K, V, N> for DefaultStore<K, V, N>
+where
+    K: Key<N>,
+{
+    fn get_branch(&self, node: &H256) -> Result<Option<BranchNode<K, N>>, Error> {
         Ok(self.branches_map.get(node).map(Clone::clone))
     }
-    fn get_leaf(&self, leaf_hash: &H256) -> Result<Option<LeafNode<V, N>>, Error> {
+    fn get_leaf(&self, leaf_hash: &H256) -> Result<Option<LeafNode<K, V, N>>, Error> {
         Ok(self.leaves_map.get(leaf_hash).map(Clone::clone))
     }
-    fn insert_branch(&mut self, node: H256, branch: BranchNode<N>) -> Result<(), Error> {
+    fn insert_branch(&mut self, node: H256, branch: BranchNode<K, N>) -> Result<(), Error> {
         self.branches_map.insert(node, branch);
         Ok(())
     }
-    fn insert_leaf(&mut self, leaf_hash: H256, leaf: LeafNode<V, N>) -> Result<(), Error> {
+    fn insert_leaf(&mut self, leaf_hash: H256, leaf: LeafNode<K, V, N>) -> Result<(), Error> {
         self.leaves_map.insert(leaf_hash, leaf);
         Ok(())
     }

@@ -11,7 +11,7 @@
 //! use blake2b_rs::{Blake2b, Blake2bBuilder};
 //!
 //! // define SMT
-//! type SMT = SparseMerkleTree<Blake2bHasher, Word, DefaultStore<Word, 32>, 32>;
+//! type SMT = SparseMerkleTree<Blake2bHasher, PaddedKey<32>, Word, DefaultStore<PaddedKey<32>, Word, 32>, 32>;
 //!
 //! // define SMT value
 //! #[derive(Default, Clone, PartialEq)]
@@ -69,6 +69,7 @@ pub mod h256;
 pub mod key;
 pub mod merge;
 pub mod merkle_proof;
+mod padded_key;
 pub mod proof_ics23;
 pub mod sha256;
 #[cfg(test)]
@@ -77,14 +78,17 @@ pub mod traits;
 pub mod tree;
 
 pub use h256::H256;
-pub use key::{Key, PaddedKey};
+pub use key::{Key, TreeKey};
 pub use merkle_proof::{CompiledMerkleProof, MerkleProof};
+pub use padded_key::PaddedKey;
 pub use tree::SparseMerkleTree;
 
 /// Expected path size: log2(256) * 2, used for hint vector capacity
 pub const EXPECTED_PATH_SIZE: usize = 16;
 /// Height of sparse merkle tree
 pub const TREE_HEIGHT: usize = 256;
+/// Key limit size
+pub const KEY_LIMIT: usize = 4_294_967_295u32 as usize;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "std")] {

@@ -1,18 +1,20 @@
 use super::*;
 use crate::{
     blake2b::Blake2bHasher, default_store::DefaultStore, error::Error, sha256::Sha256Hasher,
-    MerkleProof, SparseMerkleTree,
+    MerkleProof, PaddedKey, SparseMerkleTree,
 };
 use core::convert::{TryFrom, TryInto};
 use proptest::prelude::*;
 use rand::prelude::{Rng, SliceRandom};
 
-type Smt<const N: usize> = SparseMerkleTree<Blake2bHasher, H256, DefaultStore<H256, N>, N>;
-type ShaSmt<const N: usize> = SparseMerkleTree<Sha256Hasher, H256, DefaultStore<H256, N>, N>;
+type Smt<const N: usize> =
+    SparseMerkleTree<Blake2bHasher, PaddedKey<N>, H256, DefaultStore<PaddedKey<N>, H256, N>, N>;
+type ShaSmt<const N: usize> =
+    SparseMerkleTree<Sha256Hasher, PaddedKey<N>, H256, DefaultStore<PaddedKey<N>, H256, N>, N>;
 
 #[test]
 fn test_default_root() {
-    let mut tree = Smt::<32>::default();
+    let mut tree = Smt::<32>::new(H256::zero(), DefaultStore::default());
     assert_eq!(tree.store().branches_map().len(), 0);
     assert_eq!(tree.store().leaves_map().len(), 0);
     assert_eq!(tree.root(), &H256::zero());
@@ -41,14 +43,17 @@ fn test_default_tree() {
         .merkle_proof(vec![H256::zero().into()])
         .expect("merkle proof");
     let root = proof
-        .compute_root::<Blake2bHasher, 32>(vec![(H256::zero().into(), H256::zero())])
+        .compute_root::<Blake2bHasher, PaddedKey<32>, 32>(vec![(H256::zero().into(), H256::zero())])
         .expect("root");
     assert_eq!(&root, tree.root());
     let proof = tree
         .merkle_proof(vec![H256::zero().into()])
         .expect("merkle proof");
     let root2 = proof
-        .compute_root::<Blake2bHasher, 32>(vec![(H256::zero().into(), [42u8; 32].into())])
+        .compute_root::<Blake2bHasher, PaddedKey<32>, 32>(vec![(
+            H256::zero().into(),
+            [42u8; 32].into(),
+        )])
         .expect("root");
     assert_ne!(&root2, tree.root());
 }
@@ -56,8 +61,10 @@ fn test_default_tree() {
 #[test]
 fn test_default_merkle_proof() {
     let proof = MerkleProof::new(Default::default(), Default::default());
-    let result =
-        proof.compute_root::<Blake2bHasher, 50>(vec![([42u8; 50].into(), [42u8; 32].into())]);
+    let result = proof.compute_root::<Blake2bHasher, PaddedKey<50>, 50>(vec![(
+        [42u8; 50].into(),
+        [42u8; 32].into(),
+    )]);
     assert_eq!(
         result.unwrap_err(),
         Error::IncorrectNumberOfLeaves {
@@ -68,7 +75,10 @@ fn test_default_merkle_proof() {
     // makes room for leaves
     let proof = MerkleProof::new(vec![Vec::new()], Default::default());
     let root = proof
-        .compute_root::<Blake2bHasher, 50>(vec![([42u8; 50].into(), [42u8; 32].into())])
+        .compute_root::<Blake2bHasher, PaddedKey<50>, 50>(vec![(
+            [42u8; 50].into(),
+            [42u8; 32].into(),
+        )])
         .expect("compute root");
     assert_ne!(root, H256::zero());
 }
@@ -247,10 +257,10 @@ fn test_merkle_proof(key: PaddedKey<32>, value: H256) {
             .expect("compile proof");
         assert!(proof.proof().len() < EXPECTED_PROOF_SIZE);
         assert!(proof
-            .verify::<Blake2bHasher, 32>(tree.root(), vec![(key, value)])
+            .verify::<Blake2bHasher, PaddedKey<32>, 32>(tree.root(), vec![(key, value)])
             .expect("verify"));
         assert!(compiled_proof
-            .verify::<Blake2bHasher, 32>(tree.root(), vec![(key, value)])
+            .verify::<Blake2bHasher, PaddedKey<32>, 32>(tree.root(), vec![(key, value)])
             .expect("compiled verify"));
     }
 }
@@ -289,7 +299,7 @@ fn test_ics23_non_membership_proof() {
     let non_existent_key =
         PaddedKey::<115>::try_from("Non existent key".as_bytes().to_vec()).expect("Test failed");
     assert_eq!(
-        String::from_utf8(non_existent_key.as_slice().to_vec()).expect("Test failed"),
+        String::from_utf8(non_existent_key.to_vec()).expect("Test failed"),
         String::from("Non existent key")
     );
     let proof = smt
@@ -299,7 +309,7 @@ fn test_ics23_non_membership_proof() {
         &proof,
         &spec,
         &root,
-        non_existent_key.as_slice()
+        &non_existent_key.to_vec()
     ));
 }
 
@@ -323,7 +333,7 @@ fn test_ics23_membership_proof() {
         .expect("Test failed");
     let root = smt.root().as_slice().to_vec();
     assert_eq!(
-        String::from_utf8(existent_key.as_slice().to_vec()).expect("Test failed"),
+        String::from_utf8(existent_key.to_vec()).expect("Test failed"),
         String::from("Existent key")
     );
     let proof = smt.membership_proof(&existent_key).expect("gen proof");
@@ -331,7 +341,7 @@ fn test_ics23_membership_proof() {
         &proof,
         &spec,
         &root,
-        existent_key.as_slice(),
+        &existent_key.to_vec(),
         [42u8; 32].as_slice()
     ));
 }
@@ -341,7 +351,7 @@ fn leaves(
     max_leaves: usize,
 ) -> impl Strategy<Value = (Vec<(PaddedKey<29>, H256)>, usize)> {
     prop::collection::vec(
-        prop::array::uniform2(prop::array::uniform32(0u8..)),
+        prop::array::uniform2(prop::array::uniform32(1u8..0xF8)),
         min_leaves..=max_leaves,
     )
     .prop_flat_map(|mut pairs| {
@@ -444,8 +454,8 @@ proptest! {
         for (k, v) in pairs {
             let proof = smt.merkle_proof(vec![k]).expect("gen proof");
             let compiled_proof = proof.clone().compile(vec![(k, v)]).expect("compile proof");
-            assert!(proof.verify::<Blake2bHasher, 29>(smt.root(), vec![(k, v)]).expect("verify proof"));
-            assert!(compiled_proof.verify::<Blake2bHasher, 29>(smt.root(), vec![(k, v)]).expect("verify compiled proof"));
+            assert!(proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), vec![(k, v)]).expect("verify proof"));
+            assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), vec![(k, v)]).expect("verify compiled proof"));
         }
     }
 
@@ -455,8 +465,8 @@ proptest! {
         for (k, v) in pairs {
             let proof = smt.merkle_proof(vec![k]).expect("gen proof");
             let compiled_proof = proof.clone().compile(vec![(k, v)]).expect("compile proof");
-            assert!(proof.verify::<Blake2bHasher, 29>(smt.root(), vec![(k, v)]).expect("verify proof"));
-            assert!(compiled_proof.verify::<Blake2bHasher, 29>(smt.root(), vec![(k, v)]).expect("verify compiled proof"));
+            assert!(proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), vec![(k, v)]).expect("verify proof"));
+            assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), vec![(k, v)]).expect("verify compiled proof"));
         }
     }
 
@@ -466,8 +476,8 @@ proptest! {
         let proof = smt.merkle_proof(pairs.iter().take(n).map(|(k, _v)| *k).collect()).expect("gen proof");
         let data: Vec<(PaddedKey<29>, H256)> = pairs.into_iter().take(n).collect();
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
-        assert!(proof.verify::<Blake2bHasher, 29>(smt.root(), data.clone()).expect("verify proof"));
-        assert!(compiled_proof.verify::<Blake2bHasher, 29>(smt.root(), data).expect("verify compiled proof"));
+        assert!(proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), data.clone()).expect("verify proof"));
+        assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), data).expect("verify compiled proof"));
     }
 
     #[test]
@@ -476,15 +486,15 @@ proptest! {
         let pairs: Vec<_> = pairs
             .into_iter()
             .map(|(key, v)| (
-            PaddedKey::<120>::try_from(key.as_slice().to_vec()).unwrap(),
+            PaddedKey::<120>::try_from(key.to_vec()).unwrap(),
             v))
             .collect();
         let smt = new_smt::<120>(pairs.clone());
         let proof = smt.merkle_proof(pairs.iter().take(n).map(|(k, _v)| *k).collect()).expect("gen proof");
         let data: Vec<(PaddedKey<120>, H256)> = pairs.into_iter().take(n).collect();
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
-        assert!(proof.verify::<Blake2bHasher, 120>(smt.root(), data.clone()).expect("verify proof"));
-        assert!(compiled_proof.verify::<Blake2bHasher, 120>(smt.root(), data).expect("verify compiled proof"));
+        assert!(proof.verify::<Blake2bHasher, PaddedKey<120>, 120>(smt.root(), data.clone()).expect("verify proof"));
+        assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<120>, 120>(smt.root(), data).expect("verify compiled proof"));
     }
 
     #[test]
@@ -494,8 +504,8 @@ proptest! {
         let proof = smt.merkle_proof(non_exists_keys.clone()).expect("gen proof");
         let data: Vec<(PaddedKey<29>, H256)> = non_exists_keys.into_iter().map(|k|(k, H256::zero())).collect();
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
-        assert!(proof.verify::<Blake2bHasher ,29>(smt.root(), data.clone()).expect("verify proof"));
-        assert!(compiled_proof.verify::<Blake2bHasher, 29>(smt.root(), data).expect("verify compiled proof"));
+        assert!(proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), data.clone()).expect("verify proof"));
+        assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), data).expect("verify compiled proof"));
     }
 
     #[test]
@@ -510,8 +520,8 @@ proptest! {
         let proof = smt.merkle_proof(keys.clone()).expect("gen proof");
         let data: Vec<(PaddedKey<29>, H256)> = keys.into_iter().map(|k|(k, smt.get(&k).expect("get"))).collect();
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
-        assert!(proof.verify::<Blake2bHasher, 29>(smt.root(), data.clone()).expect("verify proof"));
-        assert!(compiled_proof.verify::<Blake2bHasher, 29>(smt.root(), data).expect("verify compiled proof"));
+        assert!(proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), data.clone()).expect("verify proof"));
+        assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<29>, 29>(smt.root(), data).expect("verify compiled proof"));
     }
 
     #[test]
@@ -571,19 +581,19 @@ proptest! {
         let root = smt.root().as_slice().to_vec();
         for (k, v) in pairs {
             let proof = smt.membership_proof(&k).expect("gen proof");
-            assert!(ics23::verify_membership(&proof, &spec, &root, k.as_slice(), v.as_slice()));
+            assert!(ics23::verify_membership(&proof, &spec, &root, &k.to_vec(), v.as_slice()));
         }
     }
 
     #[test]
     fn test_ics23_proof_non_exists_leaves((pairs, _n) in leaves(1, 20), (pairs2, _n2) in leaves(1, 5)) {
-        let pairs: Vec<(PaddedKey<115>, H256)> = pairs
+       let pairs: Vec<(PaddedKey<115>, H256)> = pairs
         .into_iter()
-        .map(|(key, v)| (PaddedKey::<115>::try_from(<[u8; 29]>::from(key).to_vec()).expect("Test failed"), v))
+        .filter_map(|(key, v)| PaddedKey::<115>::try_from(<[u8; 29]>::from(key).to_vec()).ok().map(|k| (k, v)))
         .collect();
         let pairs2: Vec<(PaddedKey<115>, H256)> = pairs2
         .into_iter()
-        .map(|(key, v)| (PaddedKey::<115>::try_from(<[u8; 29]>::from(key).to_vec()).expect("Test failed"), v))
+        .filter_map(|(key, v)| PaddedKey::<115>::try_from(<[u8; 29]>::from(key).to_vec()).ok().map(|k| (k, v)))
         .collect();
         let smt = new_sha_smt::<115>(pairs.clone());
         let spec = proof_ics23::get_spec(ics23::HashOp::Sha256);
@@ -592,7 +602,7 @@ proptest! {
         let non_exists_keys: Vec<_> = pairs2.into_iter().map(|(k, _v)|k).filter(|k| !exists_key.contains(k)).collect();
         for k in non_exists_keys {
             let proof = smt.non_membership_proof(&k).expect("gen proof");
-            assert!(ics23::verify_non_membership(&proof, &spec, &root, k.as_slice()));
+            assert!(ics23::verify_non_membership(&proof, &spec, &root, &k.to_vec()));
         }
     }
 }
