@@ -15,17 +15,10 @@
 //!
 //! // define SMT value
 //! #[derive(Default, Clone, PartialEq)]
-//! pub struct Word(String);
+//! pub struct Word(String, H256);
 //! impl Value for Word {
-//!    fn to_h256(&self) -> H256 {
-//!        if self.0.is_empty() {
-//!            return H256::zero();
-//!        }
-//!        let mut buf = [0u8; 32];
-//!        let mut hasher = new_blake2b();
-//!        hasher.update(self.0.as_bytes());
-//!        hasher.finalize(&mut buf);
-//!        buf.into()
+//!    fn as_slice(&self) -> &[u8] {
+//!        self.1.as_slice()
 //!    }
 //!    fn zero() -> Self {
 //!        Default::default()
@@ -50,7 +43,16 @@
 //!             hasher.finalize(&mut buf);
 //!             buf.into()
 //!         };
-//!         let value = Word(word.to_string());
+//!         let hash: H256 = {
+//!             let mut buf = [0u8; 32];
+//!             if !word.is_empty() {
+//!                 let mut hasher = new_blake2b();
+//!                 hasher.update(word.as_bytes());
+//!                 hasher.finalize(&mut buf);
+//!             }
+//!             buf.into()
+//!         };
+//!         let value = Word(word.to_string(), hash);
 //!         // insert key value into tree
 //!         tree.update(key, value).expect("update");
 //!     }

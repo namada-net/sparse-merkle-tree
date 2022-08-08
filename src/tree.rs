@@ -178,7 +178,7 @@ where
         }
 
         // compute and store new leaf
-        let mut node = hash_leaf::<H, K, N>(&key, &value.to_h256());
+        let mut node = hash_leaf::<H, K, V, N>(&key, &value);
         // notice when value is zero the leaf is deleted, so we do not need to store it
         if !node.is_zero() {
             self.store.insert_leaf(node, LeafNode { key, value })?;
@@ -420,7 +420,7 @@ where
         }
         let merkle_proof = self.merkle_proof(vec![*key])?;
         let existence_proof =
-            proof_ics23::convert(merkle_proof, key, &value.to_h256(), H::hash_op())?;
+            proof_ics23::convert(merkle_proof, key, &value, H::hash_op())?;
         Ok(CommitmentProof {
             proof: Some(Proof::Exist(existence_proof)),
         })
@@ -464,7 +464,7 @@ where
                 left = Some(proof_ics23::convert(
                     merkle_proof,
                     &leaf.key,
-                    &leaf.value.to_h256(),
+                    &leaf.value,
                     H::hash_op(),
                 )?);
             } else if !is_right && right.is_none() {
@@ -486,7 +486,7 @@ where
                 right = Some(proof_ics23::convert(
                     merkle_proof,
                     &leaf.key,
-                    &leaf.value.to_h256(),
+                    &leaf.value,
                     H::hash_op(),
                 )?);
             }

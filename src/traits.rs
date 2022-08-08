@@ -53,14 +53,17 @@ impl Key<32> for KeyHash {
 }
 
 /// Trait for define value structures
-pub trait Value {
-    fn to_h256(&self) -> H256;
+pub trait Value: PartialEq + Clone {
+    fn as_slice(&self) -> &[u8];
     fn zero() -> Self;
+    fn is_zero(&self) -> bool {
+        self == &Self::zero()
+    }
 }
 
 impl Value for H256 {
-    fn to_h256(&self) -> H256 {
-        *self
+    fn as_slice(&self) -> &[u8] {
+        self.as_slice()
     }
     fn zero() -> Self {
         H256::zero()

@@ -2,11 +2,12 @@ use crate::{
     collections::{BTreeMap, VecDeque},
     error::{Error, Result},
     merge::{hash_leaf, merge},
-    traits::Hasher,
+    traits::{Hasher, Value},
     vec::Vec,
     Key, H256, TREE_HEIGHT,
 };
 use core::convert::TryInto;
+
 type Range = core::ops::Range<usize>;
 
 #[derive(Debug, Clone)]
@@ -138,12 +139,13 @@ impl MerkleProof {
     ///
     /// return EmptyProof error when proof is empty
     /// return CorruptedProof error when proof is invalid
-    pub fn compute_root<H: Hasher + Default, K, const N: usize>(
+    pub fn compute_root<H: Hasher + Default, K, V, const N: usize>(
         self,
-        mut leaves: Vec<(K, H256)>,
+        mut leaves: Vec<(K, V)>,
     ) -> Result<H256>
     where
         K: Key<N>,
+        V: Value,
     {
         if leaves.is_empty() {
             return Err(Error::EmptyKeys);
@@ -164,7 +166,7 @@ impl MerkleProof {
         let mut tree_buf: BTreeMap<_, _> = leaves
             .into_iter()
             .enumerate()
-            .map(|(i, (k, v))| ((0, *k), (i, hash_leaf::<H, K, N>(&k, &v))))
+            .map(|(i, (k, v))| ((0, *k), (i, hash_leaf::<H, K, V, N>(&k, &v))))
             .collect();
         // rebuild the tree from bottom to top
         while !tree_buf.is_empty() {
@@ -228,15 +230,16 @@ impl MerkleProof {
 
     /// Verify merkle proof
     /// see compute_root_from_proof
-    pub fn verify<H: Hasher + Default, K, const N: usize>(
+    pub fn verify<H: Hasher + Default, K, V, const N: usize>(
         self,
         root: &H256,
-        leaves: Vec<(K, H256)>,
+        leaves: Vec<(K, V)>,
     ) -> Result<bool>
     where
         K: Key<N>,
+        V: Value
     {
-        let calculated_root = self.compute_root::<H, K, N>(leaves)?;
+        let calculated_root = self.compute_root::<H, K, V, N>(leaves)?;
         Ok(&calculated_root == root)
     }
 }
@@ -315,12 +318,13 @@ fn merge_program(
 pub struct CompiledMerkleProof(pub Vec<u8>);
 
 impl CompiledMerkleProof {
-    pub fn compute_root<H: Hasher + Default, K, const N: usize>(
+    pub fn compute_root<H: Hasher + Default, K, V, const N: usize>(
         &self,
-        mut leaves: Vec<(K, H256)>,
+        mut leaves: Vec<(K, V)>,
     ) -> Result<H256>
     where
         K: Key<N>,
+        V: Value,
     {
         leaves.sort_unstable_by_key(|(k, _v)| **k);
         let mut program_index = 0;
@@ -335,8 +339,8 @@ impl CompiledMerkleProof {
                     if leave_index >= leaves.len() {
                         return Err(Error::CorruptedStack);
                     }
-                    let (k, v) = leaves[leave_index];
-                    stack.push((*k, hash_leaf::<H, K, N>(&k, &v)));
+                    let (k, v) = leaves[leave_index].clone();
+                    stack.push((*k, hash_leaf::<H, K, V, N>(&k, &v)));
                     leave_index += 1;
                 }
                 // P
@@ -408,15 +412,16 @@ impl CompiledMerkleProof {
         Ok(stack[0].1)
     }
 
-    pub fn verify<H: Hasher + Default, K, const N: usize>(
+    pub fn verify<H: Hasher + Default, K, V, const N: usize>(
         &self,
         root: &H256,
-        leaves: Vec<(K, H256)>,
+        leaves: Vec<(K, V)>,
     ) -> Result<bool>
     where
         K: Key<N>,
+        V: Value,
     {
-        let calculated_root = self.compute_root::<H, K, N>(leaves)?;
+        let calculated_root = self.compute_root::<H, K, V, N>(leaves)?;
         Ok(&calculated_root == root)
     }
 }

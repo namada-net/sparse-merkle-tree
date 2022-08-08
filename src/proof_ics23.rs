@@ -2,16 +2,17 @@ use ics23::{ExistenceProof, HashOp, InnerOp, InnerSpec, LeafOp, LengthOp, ProofS
 
 use crate::collections::VecDeque;
 use crate::error::{Error, Result};
-use crate::{Key, MerkleProof, H256, TREE_HEIGHT};
+use crate::{Key, MerkleProof, H256, TREE_HEIGHT, traits::Value};
 
-pub fn convert<K, const N: usize>(
+pub fn convert<K, V, const N: usize>(
     merkle_proof: MerkleProof,
     key: &K,
-    value: &H256,
+    value: &V,
     hash_op: HashOp,
 ) -> Result<ExistenceProof>
 where
     K: Key<N>,
+    V: Value,
 {
     let (leaves_path, proof) = merkle_proof.take();
     let mut merge_heights: VecDeque<_> = leaves_path

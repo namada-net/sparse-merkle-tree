@@ -1,5 +1,5 @@
 use crate::h256::H256;
-use crate::traits::Hasher;
+use crate::traits::{Hasher, Value};
 use crate::Key;
 
 /// Merge two hash
@@ -19,9 +19,10 @@ pub fn merge<H: Hasher + Default>(lhs: &H256, rhs: &H256) -> H256 {
 
 /// hash_leaf = hash(prefix | key | value)
 /// zero value represent delete the key, this function return zero for zero value
-pub fn hash_leaf<H: Hasher + Default, K, const N: usize>(key: &K, value: &H256) -> H256
+pub fn hash_leaf<H: Hasher + Default, K, V, const N: usize>(key: &K, value: &V) -> H256
 where
     K: Key<N>,
+    V: Value,
 {
     if value.is_zero() {
         return H256::zero();
