@@ -1,3 +1,4 @@
+use crate::InternalKey;
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -127,5 +128,31 @@ impl From<[u8; 32]> for H256 {
 impl From<H256> for [u8; 32] {
     fn from(v: H256) -> [u8; 32] {
         v.0
+    }
+}
+
+/// A wrapper type for using a hash an internal key
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy, PartialOrd, Ord)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+pub struct Hash(InternalKey<32>);
+
+impl core::ops::Deref for Hash {
+    type Target = InternalKey<32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<H256> for Hash {
+    fn from(hash: H256) -> Self {
+        let hash: [u8; 32] = hash.into();
+        Self(hash.into())
+    }
+}
+
+impl From<[u8; 32]> for Hash {
+    fn from(hash: [u8; 32]) -> Self {
+        Self(hash.into())
     }
 }

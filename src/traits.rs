@@ -1,8 +1,10 @@
 use crate::{
     error::Error,
     tree::{BranchNode, LeafNode},
-    Key, H256,
+    Hash as KeyHash, InternalKey, H256,
 };
+use core::hash::Hash;
+use core::ops::Deref;
 
 /// Trait for customize hash function
 pub trait Hasher {
@@ -10,6 +12,43 @@ pub trait Hasher {
     fn finish(self) -> H256;
     fn hash_op() -> ics23::HashOp {
         ics23::HashOp::NoHash
+    }
+}
+
+/// This trait is map keys to / from the users key space into a finite
+/// key space used internally. This space is the set of all N-byte arrays
+/// where N < 2^32
+pub trait Key<const N: usize>:
+    Eq + PartialEq + Copy + Clone + Hash + Deref<Target = InternalKey<N>>
+{
+    /// The error type for failed mappings
+    type Error;
+    /// This should map from the internal key space
+    /// back into the user's key space
+    fn as_slice(&self) -> &[u8];
+    /// This should map from the internal key space
+    /// back into the user's key space
+    fn to_vec(&self) -> Vec<u8> {
+        self.as_slice().to_vec()
+    }
+    /// This should map from the user's key space into
+    /// the internal keyspace
+    fn try_from_bytes(bytes: &[u8]) -> Result<Self, Self::Error>;
+}
+
+impl Key<32> for KeyHash {
+    type Error = crate::error::Error;
+
+    fn as_slice(&self) -> &[u8] {
+        <Self as Deref>::deref(self).as_slice()
+    }
+
+    fn try_from_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
+        use std::convert::TryInto;
+        let bytes: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| crate::error::Error::KeyTooLarge)?;
+        Ok(bytes.into())
     }
 }
 

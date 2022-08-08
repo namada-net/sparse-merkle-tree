@@ -2,40 +2,16 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "borsh")]
 use core::convert::TryInto;
-use core::hash::Hash;
-use core::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 #[cfg(feature = "borsh")]
 use std::io::Write;
 
-/// This trait is map keys to / from the users key space into a finite
-/// key space used internally. This space is the set of all N-byte arrays
-/// where N < 2^32
-pub trait Key<const N: usize>:
-    Eq + PartialEq + Copy + Clone + Hash + Deref<Target = TreeKey<N>> + DerefMut<Target = TreeKey<N>>
-{
-    /// The error type for failed mappings
-    type Error;
-    /// This should map from the internal key space
-    /// back into the user's key space
-    fn to_vec(&self) -> Vec<u8>;
-    /// This should map from the user's key space into
-    /// the internal keyspace
-    fn try_from_bytes(bytes: &[u8]) -> Result<Self, Self::Error>;
-}
-
 /// The actual key value used in the tree
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct TreeKey<const N: usize>([u8; N]);
-
-impl<const N: usize> TreeKey<N> {
-    pub fn new(array: [u8; N]) -> Self {
-        Self(array)
-    }
-}
+pub struct InternalKey<const N: usize>([u8; N]);
 
 #[cfg(feature = "borsh")]
-impl<const N: usize> BorshSerialize for TreeKey<N> {
+impl<const N: usize> BorshSerialize for InternalKey<N> {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let bytes = self.0.to_vec();
         BorshSerialize::serialize(&bytes, writer)
@@ -43,22 +19,31 @@ impl<const N: usize> BorshSerialize for TreeKey<N> {
 }
 
 #[cfg(feature = "borsh")]
-impl<const N: usize> BorshDeserialize for TreeKey<N> {
+impl<const N: usize> BorshDeserialize for InternalKey<N> {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         use std::io::ErrorKind;
         let bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
         let bytes: [u8; N] = bytes.try_into().map_err(|_| {
             std::io::Error::new(ErrorKind::InvalidData, "Input byte vector is too large")
         })?;
-        Ok(TreeKey(bytes))
+        Ok(InternalKey(bytes))
     }
 }
 
 const BYTE_SIZE: usize = 8;
 
-impl<const N: usize> TreeKey<N> {
+impl<const N: usize> InternalKey<N> {
+
+    pub fn new(array: [u8; N]) -> Self {
+        Self(array)
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
+
     pub const fn zero() -> Self {
-        TreeKey([0u8; N])
+        InternalKey([0u8; N])
     }
 
     pub const fn max_index() -> usize {
@@ -90,10 +75,10 @@ impl<const N: usize> TreeKey<N> {
         self.0[byte_pos as usize] &= !((1 << bit_pos) as u8);
     }
 
-    /// Treat TreeKey as a path in a tree
+    /// Treat InternalKey as a path in a tree
     /// fork height is the number of common bits(from higher to lower)
-    /// of two TreeKey
-    pub fn fork_height(&self, key: &TreeKey<N>) -> usize {
+    /// of two InternalKey
+    pub fn fork_height(&self, key: &InternalKey<N>) -> usize {
         let max = (BYTE_SIZE * N) as usize;
         for h in (0..max).rev() {
             if self.get_bit(h) != key.get_bit(h) {
@@ -103,22 +88,22 @@ impl<const N: usize> TreeKey<N> {
         0
     }
 
-    /// Treat TreeKey as a path in a tree
+    /// Treat InternalKey as a path in a tree
     /// return parent_path of self
     pub fn parent_path(&self, height: usize) -> Self {
         height
             .checked_add(1)
             .map(|i| self.copy_bits(i..))
-            .unwrap_or_else(TreeKey::zero)
+            .unwrap_or_else(InternalKey::zero)
     }
 
-    /// Copy bits and return a new TreeKey
+    /// Copy bits and return a new InternalKey
     pub fn copy_bits(&self, range: impl core::ops::RangeBounds<usize>) -> Self {
         let array_size = N;
         let max = 8 * N;
         use core::ops::Bound;
 
-        let mut target = TreeKey::zero();
+        let mut target = InternalKey::zero();
         let start = match range.start_bound() {
             Bound::Included(&i) => i as usize,
             Bound::Excluded(&i) => panic!("do not allows excluded start: {}", i),
@@ -163,14 +148,14 @@ impl<const N: usize> TreeKey<N> {
     }
 }
 
-impl<const N: usize> From<[u8; N]> for TreeKey<N> {
+impl<const N: usize> From<[u8; N]> for InternalKey<N> {
     fn from(v: [u8; N]) -> Self {
         Self::new(v)
     }
 }
 
-impl<const N: usize> From<TreeKey<N>> for [u8; N] {
-    fn from(v: TreeKey<N>) -> Self {
+impl<const N: usize> From<InternalKey<N>> for [u8; N] {
+    fn from(v: InternalKey<N>) -> Self {
         v.0
     }
 }

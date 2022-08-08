@@ -6,12 +6,12 @@
 //! use sparse_merkle_tree::{
 //!     blake2b::Blake2bHasher, default_store::DefaultStore,
 //!     error::Error, MerkleProof,
-//!     SparseMerkleTree, traits::Value, H256, PaddedKey,
+//!     SparseMerkleTree, traits::Value, H256, Hash,
 //! };
 //! use blake2b_rs::{Blake2b, Blake2bBuilder};
 //!
 //! // define SMT
-//! type SMT = SparseMerkleTree<Blake2bHasher, PaddedKey<32>, Word, DefaultStore<PaddedKey<32>, Word, 32>, 32>;
+//! type SMT = SparseMerkleTree<Blake2bHasher, Hash, Word, DefaultStore<Hash, Word, 32>, 32>;
 //!
 //! // define SMT value
 //! #[derive(Default, Clone, PartialEq)]
@@ -43,7 +43,7 @@
 //!         .split_whitespace()
 //!         .enumerate()
 //!     {
-//!         let key: PaddedKey<32> = {
+//!         let key: Hash = {
 //!             let mut buf = [0u8; 32];
 //!             let mut hasher = new_blake2b();
 //!             hasher.update(&(i as u32).to_le_bytes());
@@ -66,10 +66,9 @@ pub mod blake2b;
 pub mod default_store;
 pub mod error;
 pub mod h256;
-pub mod key;
+pub mod internal_key;
 pub mod merge;
 pub mod merkle_proof;
-mod padded_key;
 pub mod proof_ics23;
 pub mod sha256;
 #[cfg(test)]
@@ -77,10 +76,10 @@ mod tests;
 pub mod traits;
 pub mod tree;
 
-pub use h256::H256;
-pub use key::{Key, TreeKey};
+pub use h256::{Hash, H256};
+pub use internal_key::InternalKey;
 pub use merkle_proof::{CompiledMerkleProof, MerkleProof};
-pub use padded_key::PaddedKey;
+pub use traits::Key;
 pub use tree::SparseMerkleTree;
 
 /// Expected path size: log2(256) * 2, used for hint vector capacity

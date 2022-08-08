@@ -28,7 +28,7 @@ where
     }
     let mut hasher = H::default();
     hasher.write_bytes(H256::zero().as_slice());
-    hasher.write_bytes(&key.to_vec());
+    hasher.write_bytes(key.as_slice());
     hasher.write_bytes(value.as_slice());
     hasher.finish()
 }

@@ -6,7 +6,7 @@ use crate::{
     proof_ics23,
     traits::{Hasher, Store, Value},
     vec::Vec,
-    Key, TreeKey, EXPECTED_PATH_SIZE, H256,
+    Key, InternalKey, EXPECTED_PATH_SIZE, H256,
 };
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -260,7 +260,7 @@ where
     fn fetch_merkle_path(
         &self,
         key: &K,
-        cache: &mut BTreeMap<(usize, TreeKey<N>), H256>,
+        cache: &mut BTreeMap<(usize, InternalKey<N>), H256>,
     ) -> Result<()> {
         let mut node = self.root;
         let mut height = self

@@ -1,5 +1,8 @@
+//! A type to test custom implementations of mapping from
+//! application specific keys to internal keys.
+
 use crate::H256;
-use crate::{Key, TreeKey};
+use crate::{Key, InternalKey};
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::convert::TryFrom;
@@ -13,12 +16,12 @@ use core::ops::{Deref, DerefMut};
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 pub struct PaddedKey<const N: usize> {
-    pub padded: TreeKey<N>,
+    pub padded: InternalKey<N>,
     pub length: usize,
 }
 
 impl<const N: usize> Deref for PaddedKey<N> {
-    type Target = TreeKey<N>;
+    type Target = InternalKey<N>;
 
     fn deref(&self) -> &Self::Target {
         &self.padded
@@ -38,6 +41,10 @@ impl<const N: usize> Key<N> for PaddedKey<N> {
         array[..self.length].to_vec()
     }
 
+    fn as_slice(&self) -> &[u8] {
+        &self.padded.as_slice()[..self.length]
+    }
+
     fn try_from_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
         Self::try_from(bytes.to_vec())
     }
@@ -52,7 +59,7 @@ impl<const N: usize> TryFrom<Vec<u8>> for PaddedKey<N> {
             let mut padded = [0xFF_u8; N];
             padded[..v.len()].copy_from_slice(&v);
             Ok(PaddedKey {
-                padded: TreeKey::<N>::new(padded),
+                padded: InternalKey::<N>::new(padded),
                 length: v.len(),
             })
         }
@@ -74,7 +81,7 @@ impl From<H256> for PaddedKey<32> {
 impl<const N: usize> From<[u8; N]> for PaddedKey<N> {
     fn from(v: [u8; N]) -> Self {
         PaddedKey {
-            padded: TreeKey::<N>::new(v),
+            padded: InternalKey::<N>::new(v),
             length: N,
         }
     }

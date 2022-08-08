@@ -1,9 +1,12 @@
+mod padded_key;
+
 use super::*;
 use crate::{
     blake2b::Blake2bHasher, default_store::DefaultStore, error::Error, sha256::Sha256Hasher,
-    MerkleProof, PaddedKey, SparseMerkleTree,
+    MerkleProof, SparseMerkleTree,
 };
 use core::convert::{TryFrom, TryInto};
+use padded_key::PaddedKey;
 use proptest::prelude::*;
 use rand::prelude::{Rng, SliceRandom};
 
