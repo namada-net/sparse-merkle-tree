@@ -26,3 +26,8 @@ criterion = "0.3.4"
 hex = "0.4"
 proptest = "1.0.0"
 rand = "0.8.3"
+random-string = "1.0.0"
+
+[[bench]]
+harness = false
+name = "smt_benchmark"
