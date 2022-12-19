@@ -46,7 +46,10 @@ fn test_default_tree() {
         .merkle_proof(vec![H256::zero().into()])
         .expect("merkle proof");
     let root = proof
-        .compute_root::<Blake2bHasher, PaddedKey<32>, H256, 32>(vec![(H256::zero().into(), H256::zero())])
+        .compute_root::<Blake2bHasher, PaddedKey<32>, H256, 32>(vec![(
+            H256::zero().into(),
+            H256::zero(),
+        )])
         .expect("root");
     assert_eq!(&root, tree.root());
     let proof = tree
@@ -308,7 +311,7 @@ fn test_ics23_non_membership_proof() {
     let proof = smt
         .non_membership_proof(&non_existent_key)
         .expect("gen proof");
-    assert!(ics23::verify_non_membership(
+    assert!(ics23::verify_non_membership::<ics23::HostFunctionsManager>(
         &proof,
         &spec,
         &root,
@@ -340,7 +343,7 @@ fn test_ics23_membership_proof() {
         String::from("Existent key")
     );
     let proof = smt.membership_proof(&existent_key).expect("gen proof");
-    assert!(ics23::verify_membership(
+    assert!(ics23::verify_membership::<ics23::HostFunctionsManager>(
         &proof,
         &spec,
         &root,
@@ -584,7 +587,7 @@ proptest! {
         let root = smt.root().as_slice().to_vec();
         for (k, v) in pairs {
             let proof = smt.membership_proof(&k).expect("gen proof");
-            assert!(ics23::verify_membership(&proof, &spec, &root, &k.to_vec(), v.as_slice()));
+            assert!(ics23::verify_membership::<ics23::HostFunctionsManager>(&proof, &spec, &root, &k.to_vec(), v.as_slice()));
         }
     }
 
@@ -605,7 +608,7 @@ proptest! {
         let non_exists_keys: Vec<_> = pairs2.into_iter().map(|(k, _v)|k).filter(|k| !exists_key.contains(k)).collect();
         for k in non_exists_keys {
             let proof = smt.non_membership_proof(&k).expect("gen proof");
-            assert!(ics23::verify_non_membership(&proof, &spec, &root, &k.to_vec()));
+            assert!(ics23::verify_non_membership::<ics23::HostFunctionsManager>(&proof, &spec, &root, &k.to_vec()));
         }
     }
 }
