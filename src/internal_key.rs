@@ -3,6 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "borsh")]
 use core::convert::TryInto;
 use std::fmt::Debug;
+use std::io::Read;
 #[cfg(feature = "borsh")]
 use std::io::Write;
 
@@ -20,9 +21,9 @@ impl<const N: usize> BorshSerialize for InternalKey<N> {
 
 #[cfg(feature = "borsh")]
 impl<const N: usize> BorshDeserialize for InternalKey<N> {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         use std::io::ErrorKind;
-        let bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+        let bytes: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
         let bytes: [u8; N] = bytes.try_into().map_err(|_| {
             std::io::Error::new(ErrorKind::InvalidData, "Input byte vector is too large")
         })?;
@@ -33,7 +34,6 @@ impl<const N: usize> BorshDeserialize for InternalKey<N> {
 const BYTE_SIZE: usize = 8;
 
 impl<const N: usize> InternalKey<N> {
-
     pub fn new(array: [u8; N]) -> Self {
         Self(array)
     }
