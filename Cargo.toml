@@ -11,12 +11,12 @@ version = "0.3.1-pre"
 
 [features]
 blake2b = ["blake2b-rs"]
-default = ["std", "blake2b"]
+default = ["std", "blake2b", "borsh"]
 std = []
 
 [dependencies]
 blake2b-rs = {version = "0.2.0", optional = true}
-borsh = {version = "0.9.0", optional = true}
+borsh = {version = "1.0.0-alpha.4", optional = true, features = ["schema", "derive"]}
 cfg-if = "1.0.0"
 ics23 = "0.9.0"
 sha2 = "0.9.3"
