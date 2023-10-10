@@ -68,6 +68,7 @@ pub fn get_spec(hash_op: HashOp) -> ProofSpec {
         inner_spec: Some(get_inner_spec(hash_op)),
         max_depth: TREE_HEIGHT as i32,
         min_depth: 0,
+        prehash_key_before_comparison: false,
     }
 }
 
