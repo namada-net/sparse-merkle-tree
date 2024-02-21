@@ -81,4 +81,7 @@ where
     fn insert_leaf(&mut self, leaf_key: H256, leaf: LeafNode<K, V, N>) -> Result<(), Error>;
     fn remove_branch(&mut self, node: &H256) -> Result<(), Error>;
     fn remove_leaf(&mut self, leaf_key: &H256) -> Result<(), Error>;
+    fn sorted_leaves<'a>(&'a self) -> impl Iterator<Item=(K, &'a V)> where V: 'a;
+    fn size(&self) -> usize;
 }
+

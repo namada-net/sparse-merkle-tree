@@ -21,6 +21,7 @@ fn test_default_root() {
     assert_eq!(tree.store().branches_map().len(), 0);
     assert_eq!(tree.store().leaves_map().len(), 0);
     assert_eq!(tree.root(), &H256::zero());
+    assert!(tree.validate());
 
     // insert a key-value
     tree.update(H256::zero().into(), [42u8; 32].into())
@@ -30,11 +31,13 @@ fn test_default_root() {
     assert_ne!(tree.store().leaves_map().len(), 0);
     let zero: PaddedKey<32> = H256::zero().into();
     assert_eq!(tree.get(&zero).expect("get"), [42u8; 32].into());
+    assert!(tree.validate());
     // update zero is to delete the key
     tree.update(H256::zero().into(), H256::zero())
         .expect("update");
     assert_eq!(tree.root(), &H256::zero());
     assert_eq!(tree.get(&zero).expect("get"), H256::zero());
+    assert!(tree.validate());
 }
 
 #[test]
@@ -90,6 +93,26 @@ fn test_default_merkle_proof() {
 }
 
 #[test]
+fn test_validate() {
+    fn new_blake2b() -> blake2b_rs::Blake2b {
+        blake2b_rs::Blake2bBuilder::new(32).personal(b"Smt").build()
+    }
+    let mut tree = Smt::<1>::default();
+    for key_byte in [[0u8], [1], [4], [7], [8]] {
+        let key: PaddedKey<1> = key_byte.into();
+        let value: H256 = {
+            let mut buf = [0u8; 32];
+            let mut hasher = new_blake2b();
+            hasher.update(&key_byte);
+            hasher.finalize(&mut buf);
+            buf.into()
+        };
+        tree.update(key, value).expect("Test failed");
+    }
+    assert!(tree.validate());
+}
+
+#[test]
 fn test_merkle_root() {
     fn new_blake2b() -> blake2b_rs::Blake2b {
         blake2b_rs::Blake2bBuilder::new(32).personal(b"Smt").build()
@@ -124,6 +147,7 @@ fn test_merkle_root() {
     .into();
     assert_eq!(tree.store().leaves_map().len(), 9);
     assert_eq!(tree.root(), &expected_root);
+    assert!(tree.validate());
 }
 
 #[test]
@@ -211,6 +235,7 @@ fn test_delete_a_leaf() {
     assert_eq!(tree.root(), &root);
     assert_eq!(tree.store().leaves_map(), store.leaves_map());
     assert_eq!(tree.store().branches_map(), store.branches_map());
+    assert!(tree.validate());
 }
 
 fn test_construct(key: PaddedKey<10>, value: H256) {
@@ -484,6 +509,7 @@ proptest! {
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
         assert!(proof.verify::<Blake2bHasher, PaddedKey<29>, H256, 29>(smt.root(), data.clone()).expect("verify proof"));
         assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<29>, H256, 29>(smt.root(), data).expect("verify compiled proof"));
+        assert!(smt.validate());
     }
 
     #[test]
@@ -501,6 +527,7 @@ proptest! {
         let compiled_proof = proof.clone().compile(data.clone()).expect("compile proof");
         assert!(proof.verify::<Blake2bHasher, PaddedKey<120>, H256, 120>(smt.root(), data.clone()).expect("verify proof"));
         assert!(compiled_proof.verify::<Blake2bHasher, PaddedKey<120>, H256, 120>(smt.root(), data).expect("verify compiled proof"));
+        assert!(smt.validate());
     }
 
     #[test]

@@ -124,7 +124,7 @@ where
     pub fn update(&mut self, key: K, value: V) -> Result<&H256> {
         // store the path, sparse index will ignore zero members
         let mut path: BTreeMap<_, _> = Default::default();
-        // walk path from top to bottom
+        // walk path from root to leaf
         let mut node = self.root;
         let mut branch = self.store.get_branch(&node)?;
         let mut height = branch
@@ -195,7 +195,7 @@ where
             )?;
         }
 
-        // recompute the tree from bottom to top
+        // recompute the tree from top to bottom
         while !path.is_empty() {
             // pop from path
             let height = path.iter().next().map(|(height, _)| *height).unwrap();
@@ -228,7 +228,7 @@ where
     /// return zero value if leaf not exists
     pub fn get(&self, key: &K) -> Result<V> {
         let mut node = self.root;
-        // children must equals to zero when parent equals to zero
+        // children must equal zero when parent equals zero
         while !node.is_zero() {
             let branch_node = match self.store.get_branch(&node)? {
                 Some(branch_node) => branch_node,
@@ -502,5 +502,69 @@ where
         Ok(CommitmentProof {
             proof: Some(Proof::Nonexist(proof)),
         })
+    }
+
+    /// Recompute the root of the merkle tree from the store. Check if it agrees with the
+    /// root in `self`.
+    pub fn validate(&self) -> bool {
+        // create an iterator over consecutive pairs of leaves
+        let pairs = {
+            let sorted_leaves = self.store.sorted_leaves();
+            let mut other = self.store.sorted_leaves();
+            _ = other.next();
+            sorted_leaves.zip(other)
+        };
+
+        // handle case when tree is empty
+        if self.store.size() == 0 {
+            return self.root == H256::zero()
+        }
+
+        // construct a vector of nodes and distance to next node
+        let mut leaves = Vec::with_capacity(self.store.size());
+        for ((k1, v1), (k2, _)) in pairs {
+            let height = k1.fork_height(&k2);
+            let hash = hash_leaf::<H, K, V, N>(&k1, &v1);
+            leaves.push((hash, height));
+        }
+        let (last_k, last_v) = self.store
+            .sorted_leaves()
+            .last()
+            .map(|(k, v)| (k, v))
+            .unwrap();
+        let last = hash_leaf::<H, K, V, N>(&last_k, last_v);
+        if leaves.is_empty() {
+            return self.root == last;
+        }
+        leaves.push((last, usize::MAX));
+
+        // find the next node `n` such that `n+1` is the closest neighbor
+        // of `n` and vice versa. These can be merged
+        let find_next = |leaves: &[(H256, usize)]| {
+            for ix in 0..leaves.len() - 1 {
+                if leaves[ix].1 < leaves[ix + 1].1 {
+                    return ix;
+                }
+            }
+            unreachable!()
+        };
+
+        loop {
+            // find the next pair of nodes to merge
+            let next_left = find_next(&leaves);
+            let next_right = next_left + 1;
+            let merged = merge::<H>(&leaves[next_left].0, &leaves[next_right].0);
+            // perform the merge
+            let (_, dist) = leaves.remove(next_right);
+            leaves[next_left].0 = merged;
+            leaves[next_left].1 = dist;
+            // we have recovered the root
+            if leaves.len() == 1 {
+                break;
+            }
+        }
+
+        // check that the computed root is the same as the precomputed one
+        leaves[0].0 == self.root
     }
 }

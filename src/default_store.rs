@@ -1,12 +1,8 @@
-use crate::{
-    collections,
-    error::Error,
-    traits::Store,
-    tree::{BranchNode, LeafNode},
-    Key, H256,
-};
+use std::ops::Deref;
+use crate::{collections, error::Error, traits::Store, tree::{BranchNode, LeafNode}, Key, H256};
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
+use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -71,6 +67,17 @@ where
     fn remove_leaf(&mut self, leaf_hash: &H256) -> Result<(), Error> {
         self.leaves_map.remove(leaf_hash);
         Ok(())
+    }
+
+    fn sorted_leaves<'a>(&'a self) -> impl Iterator<Item=(K, &'a V)> where V: 'a {
+        self.leaves_map
+            .iter()
+            .sorted_by_key(|(_, v)| <K as Deref>::deref(&v.key))
+            .map(|(_, v)| (v.key, &v.value))
+    }
+
+    fn size(&self) -> usize {
+        self.leaves_map.len()
     }
 }
 

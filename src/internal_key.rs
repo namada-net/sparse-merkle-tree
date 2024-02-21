@@ -77,7 +77,7 @@ impl<const N: usize> InternalKey<N> {
 
     /// Treat InternalKey as a path in a tree
     /// fork height is the number of common bits(from higher to lower)
-    /// of two InternalKey
+    /// of two InternalKeys
     pub fn fork_height(&self, key: &InternalKey<N>) -> usize {
         let max = (BYTE_SIZE * N) as usize;
         for h in (0..max).rev() {

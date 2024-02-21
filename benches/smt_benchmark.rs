@@ -100,6 +100,12 @@ fn bench_hashes(c: &mut Criterion) {
             assert!(valid.expect("verify result"));
         });
     });
+
+    c.bench_function("ShaSmt validate tree", |b| {
+        let mut rng = thread_rng();
+        let (smt, _) = random_shasmt(10_000, &mut rng);
+        b.iter(||{ assert!(smt.validate()) });
+    });
 }
 
 fn bench_strings(c: &mut Criterion) {
@@ -155,6 +161,13 @@ fn bench_strings(c: &mut Criterion) {
             assert!(valid.expect("verify result"));
         });
     });
+
+    c.bench_function("StringSmt validate tree", |b| {
+        let mut rng = thread_rng();
+        let (smt, _) = random_stringsmt(10_000, &mut rng);
+        b.iter(||{ assert!(smt.validate()) });
+    });
+
 }
 
 criterion_group!(
