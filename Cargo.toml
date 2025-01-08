@@ -1,11 +1,11 @@
 [package]
 authors = ["jjy <jjyruby@gmail.com>"]
-description = "Sparse merkle tree implement in rust"
+description = "(Namada fork) Sparse merkle tree implement in rust"
 edition = "2018"
 license = "MIT"
-name = "sparse-merkle-tree"
-repository = "https://github.com/jjyr/sparse-merkle-tree"
-version = "0.3.1-pre"
+name = "nam-sparse-merkle-tree"
+repository = "https://github.com/anoma/sparse-merkle-tree"
+version = "0.3.2-nam.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,11 +19,11 @@ blake2b-rs = {version = "0.2.0", optional = true}
 borsh = {version = "1.2.0", optional = true, features = ["unstable__schema", "derive"]}
 cfg-if = "1.0.0"
 ics23 = "0.12.0"
-itertools = "0.12.1"
-sha2 = "0.9.3"
+itertools = "0.14.0"
+sha2 = "0.10.8"
 
 [dev-dependencies]
-criterion = "0.3.4"
+criterion = "0.5.1"
 hex = "0.4"
 proptest = "1.0.0"
 rand = "0.8.3"
