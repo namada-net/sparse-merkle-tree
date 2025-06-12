@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use rand::Rng;
 use random_string::generate;
-use sparse_merkle_tree::{InternalKey, Key};
+use nam_sparse_merkle_tree::{InternalKey, Key};
 
 pub const IBC_KEY_LIMIT: usize = 300;
 pub const ICS_IDENTIFIER_CHARSET: &str = "1234567890abcdefghijklmnopqrstuvwxyz._+-#[]<>";

@@ -5,7 +5,7 @@ mod string_key;
 
 use criterion::Criterion;
 use rand::{thread_rng, Rng};
-use sparse_merkle_tree::{
+use nam_sparse_merkle_tree::{
     sha256::Sha256Hasher, default_store::DefaultStore,
     tree::SparseMerkleTree, H256, Hash
 };
