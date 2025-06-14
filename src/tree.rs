@@ -538,33 +538,42 @@ where
         }
         leaves.push((last, usize::MAX));
 
-        // find the next node `n` such that `n+1` is the closest neighbor
-        // of `n` and vice versa. These can be merged
-        let find_next = |leaves: &[(H256, usize)]| {
-            for ix in 0..leaves.len() - 1 {
-                if leaves[ix].1 < leaves[ix + 1].1 {
-                    return ix;
+        let mut left: usize = 0;
+        let mut right: usize = 1;
+        let mut merged = Default::default();
+
+        // stack of previous `left` indexes that are yet to be merged
+        let mut prev: Vec<usize> = Vec::with_capacity(leaves.len() / 2);
+
+        // Iterate finding the first node `left` such that `left+1` (`right`) is
+        // its closest neighbor and vice versa, merging them until a single node
+        // remains.
+        while right < leaves.len() {
+            if leaves[left].1 < leaves[right].1 {
+                loop {
+                    // perform merge
+                    merged = merge::<H>(&leaves[left].0, &leaves[right].0);
+                    leaves[right].0 = merged;
+
+                    // check previous `left` node next (if present)
+                    match prev.last() {
+                        Some(&idx) if leaves[idx].1 < leaves[right].1 => {
+                            left = idx;
+                            _ = prev.pop();
+                            continue;
+                        }
+                        _ => {
+                            break;
+                        }
+                    }
                 }
+            } else {
+                prev.push(left);
             }
-            unreachable!()
-        };
-
-        loop {
-            // find the next pair of nodes to merge
-            let next_left = find_next(&leaves);
-            let next_right = next_left + 1;
-            let merged = merge::<H>(&leaves[next_left].0, &leaves[next_right].0);
-            // perform the merge
-            let (_, dist) = leaves.remove(next_right);
-            leaves[next_left].0 = merged;
-            leaves[next_left].1 = dist;
-            // we have recovered the root
-            if leaves.len() == 1 {
-                break;
-            }
+            left = right;
+            right += 1;
         }
-
-        // check that the computed root is the same as the precomputed one
-        leaves[0].0 == self.root
+        // check that the recovered root matches the precomputed one
+        merged == self.root
     }
 }
