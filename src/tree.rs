@@ -13,6 +13,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use core::{cmp::max, marker::PhantomData};
 use ics23::commitment_proof::Proof;
 use ics23::{CommitmentProof, NonExistenceProof};
+use itertools::Itertools;
 
 /// A branch in the SMT
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -507,32 +508,32 @@ where
     /// Recompute the root of the merkle tree from the store. Check if it agrees with the
     /// root in `self`.
     pub fn validate(&self) -> bool {
-        // create an iterator over consecutive pairs of leaves
-        let pairs = {
-            let sorted_leaves = self.store.sorted_leaves();
-            let mut other = self.store.sorted_leaves();
-            _ = other.next();
-            sorted_leaves.zip(other)
-        };
-
         // handle case when tree is empty
         if self.store.size() == 0 {
             return self.root == H256::zero()
         }
 
+        let sorted_leaves = self.store
+            .sorted_leaves()
+            .map(|(k, v)| (k, v.clone()))
+            .collect::<Vec<_>>();
+        // iterator over consecutive pairs of leaves
+        let pairs = sorted_leaves
+            .iter()
+            .tuple_windows::<(_, _)>();
+
         // construct a vector of nodes and distance to next node
         let mut leaves = Vec::with_capacity(self.store.size());
         for ((k1, v1), (k2, _)) in pairs {
-            let height = k1.fork_height(&k2);
-            let hash = hash_leaf::<H, K, V, N>(&k1, &v1);
+            let height = k1.fork_height(k2);
+            let hash = hash_leaf::<H, K, V, N>(k1, v1);
             leaves.push((hash, height));
         }
-        let (last_k, last_v) = self.store
-            .sorted_leaves()
+        let (last_k, last_v) = sorted_leaves
             .last()
             .map(|(k, v)| (k, v))
             .unwrap();
-        let last = hash_leaf::<H, K, V, N>(&last_k, last_v);
+        let last = hash_leaf::<H, K, V, N>(last_k, last_v);
         if leaves.is_empty() {
             return self.root == last;
         }
