@@ -3,7 +3,7 @@ extern crate criterion;
 
 mod string_key;
 
-use criterion::{BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, Throughput};
 use rand::{thread_rng, Rng};
 use nam_sparse_merkle_tree::{
     sha256::Sha256Hasher, default_store::DefaultStore,
@@ -109,11 +109,20 @@ fn bench_hashes(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("ShaSmt validate tree", |b| {
-        let mut rng = thread_rng();
-        let (smt, _) = random_shasmt(10_000, &mut rng);
-        b.iter(||{ assert!(smt.validate()) });
-    });
+    let mut group = c.benchmark_group("ShaSmt validate tree");
+    for size in [10_000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut rng = thread_rng();
+                let (smt, _) = random_shasmt(size, &mut rng);
+                b.iter(||{ assert!(smt.validate()) });
+            }
+        );
+    }
+    group.finish();
 }
 
 fn bench_strings(c: &mut Criterion) {
@@ -178,11 +187,20 @@ fn bench_strings(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("StringSmt validate tree", |b| {
-        let mut rng = thread_rng();
-        let (smt, _) = random_stringsmt(10_000, &mut rng);
-        b.iter(||{ assert!(smt.validate()) });
-    });
+    let mut group = c.benchmark_group("StringSmt validate tree");
+    for size in [10_000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut rng = thread_rng();
+                let (smt, _) = random_stringsmt(size, &mut rng);
+                b.iter(||{ assert!(smt.validate()) });
+            }
+        );
+    }
+    group.finish();
 
 }
 
