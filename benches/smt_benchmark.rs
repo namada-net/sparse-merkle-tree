@@ -3,9 +3,9 @@ extern crate criterion;
 
 mod string_key;
 
-use criterion::Criterion;
+use criterion::{BenchmarkId, Criterion, Throughput};
 use rand::{thread_rng, Rng};
-use sparse_merkle_tree::{
+use nam_sparse_merkle_tree::{
     sha256::Sha256Hasher, default_store::DefaultStore,
     tree::SparseMerkleTree, H256, Hash
 };
@@ -48,29 +48,37 @@ fn random_stringsmt(update_count: usize, rng: &mut impl Rng) -> (StringSmt, Vec<
 }
 
 fn bench_hashes(c: &mut Criterion) {
-    c.bench_function_over_inputs(
-        "ShaSmt update",
-        |b, &&size| {
-            b.iter(|| {
-                let mut rng = thread_rng();
-                random_shasmt(size, &mut rng)
-            });
-        },
-        &[100, 10_000],
-    );
+    let mut group = c.benchmark_group("ShaSmt update");
+    for size in [100, 10_000].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                b.iter(|| {
+                    let mut rng = thread_rng();
+                    random_shasmt(size, &mut rng)
+                });
+            }
+        );
+    }
+    group.finish();
 
-    c.bench_function_over_inputs(
-        "ShaSmt get",
-        |b, &&size| {
-            let mut rng = thread_rng();
-            let (smt, _keys) = random_shasmt(size, &mut rng);
-            b.iter(|| {
-                let key = random_h256(&mut rng).into();
-                smt.get(&key).unwrap();
-            });
-        },
-        &[5_000, 10_000],
-    );
+    let mut group = c.benchmark_group("ShaSmt get");
+    for size in [5_000, 10_000].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut rng = thread_rng();
+                let (smt, _keys) = random_shasmt(size, &mut rng);
+                b.iter(|| {
+                    let key = random_h256(&mut rng).into();
+                    smt.get(&key).unwrap();
+                });
+            }
+        );
+    }
+    group.finish();
 
     c.bench_function("ShaSmt generate merkle proof", |b| {
         let mut rng = thread_rng();
@@ -101,37 +109,54 @@ fn bench_hashes(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("ShaSmt validate tree", |b| {
-        let mut rng = thread_rng();
-        let (smt, _) = random_shasmt(10_000, &mut rng);
-        b.iter(||{ assert!(smt.validate()) });
-    });
+    let mut group = c.benchmark_group("ShaSmt validate tree");
+    for size in [10_000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut rng = thread_rng();
+                let (smt, _) = random_shasmt(size, &mut rng);
+                b.iter(||{ assert!(smt.validate()) });
+            }
+        );
+    }
+    group.finish();
 }
 
 fn bench_strings(c: &mut Criterion) {
-    c.bench_function_over_inputs(
-        "StringSmt update",
-        |b, &&size| {
-            b.iter(|| {
-                let mut rng = thread_rng();
-                random_stringsmt(size, &mut rng)
-            });
-        },
-        &[100, 10_000],
-    );
+    let mut group = c.benchmark_group("StringSmt update");
+    for size in [100, 10_000].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                b.iter(|| {
+                    let mut rng = thread_rng();
+                    random_stringsmt(size, &mut rng)
+                });
+            }
+        );
+    }
+    group.finish();
 
-    c.bench_function_over_inputs(
-        "StringSmt get",
-        |b, &&size| {
-            let mut rng = thread_rng();
-            let (smt, _keys) = random_stringsmt(size, &mut rng);
-            b.iter(|| {
-                let key = random_stringkey(&mut rng).into();
-                smt.get(&key).unwrap();
-            });
-        },
-        &[5_000, 10_000],
-    );
+    let mut group = c.benchmark_group("StringSmt get");
+    for size in [5_000, 10_000].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut rng = thread_rng();
+                let (smt, _keys) = random_stringsmt(size, &mut rng);
+                b.iter(|| {
+                    let key = random_stringkey(&mut rng).into();
+                    smt.get(&key).unwrap();
+                });
+            }
+        );
+    }
+    group.finish();
 
     c.bench_function("StringSmt generate merkle proof", |b| {
         let mut rng = thread_rng();
@@ -162,17 +187,26 @@ fn bench_strings(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("StringSmt validate tree", |b| {
-        let mut rng = thread_rng();
-        let (smt, _) = random_stringsmt(10_000, &mut rng);
-        b.iter(||{ assert!(smt.validate()) });
-    });
+    let mut group = c.benchmark_group("StringSmt validate tree");
+    for size in [10_000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut rng = thread_rng();
+                let (smt, _) = random_stringsmt(size, &mut rng);
+                b.iter(||{ assert!(smt.validate()) });
+            }
+        );
+    }
+    group.finish();
 
 }
 
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = bench_strings
+    targets = bench_hashes, bench_strings
 );
 criterion_main!(benches);

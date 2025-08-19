@@ -1,10 +1,8 @@
-use std::convert::TryInto;
-use std::io::Write;
 use std::ops::Deref;
 
 use rand::Rng;
 use random_string::generate;
-use sparse_merkle_tree::{InternalKey, Key};
+use nam_sparse_merkle_tree::{InternalKey, Key};
 
 pub const IBC_KEY_LIMIT: usize = 300;
 pub const ICS_IDENTIFIER_CHARSET: &str = "1234567890abcdefghijklmnopqrstuvwxyz._+-#[]<>";
@@ -67,10 +65,10 @@ enum Identifier {
 /// Generate a random identifier complying with ICS
 fn random_identifier(id: Identifier, rng: &mut impl Rng) -> String {
     let range = match id {
-        Identifier::Port => (2..=128usize),
-        Identifier::Client => (9..=64),
-        Identifier::Connection => (10..=64),
-        Identifier::Channel => (8..=64),
+        Identifier::Port => 2..=128usize,
+        Identifier::Client => 9..=64,
+        Identifier::Connection => 10..=64,
+        Identifier::Channel => 8..=64,
     };
     generate(rng.gen_range(range), ICS_IDENTIFIER_CHARSET)
 }
