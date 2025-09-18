@@ -6,7 +6,7 @@ use crate::{
     proof_ics23,
     traits::{Hasher, Store, Value},
     vec::Vec,
-    Key, InternalKey, EXPECTED_PATH_SIZE, H256,
+    InternalKey, Key, EXPECTED_PATH_SIZE, H256,
 };
 #[cfg(feature = "borsh")]
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -65,6 +65,23 @@ where
     store: S,
     root: H256,
     phantom: PhantomData<(H, K, V)>,
+}
+
+// Clone without a bound on hasher `H`
+impl<H, K, V, S, const N: usize> Clone for SparseMerkleTree<H, K, V, S, N>
+where
+    H: Hasher + Default,
+    K: Key<N>,
+    V: Value,
+    S: Store<K, V, N> + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            store: self.store.clone(),
+            root: self.root.clone(),
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl<H, K, V, S, const N: usize> Default for SparseMerkleTree<H, K, V, S, N>
@@ -420,8 +437,7 @@ where
             return Err(Error::ExistenceProof);
         }
         let merkle_proof = self.merkle_proof(vec![*key])?;
-        let existence_proof =
-            proof_ics23::convert(merkle_proof, key, &value, H::hash_op())?;
+        let existence_proof = proof_ics23::convert(merkle_proof, key, &value, H::hash_op())?;
         Ok(CommitmentProof {
             proof: Some(Proof::Exist(existence_proof)),
         })
@@ -510,17 +526,16 @@ where
     pub fn validate(&self) -> bool {
         // handle case when tree is empty
         if self.store.size() == 0 {
-            return self.root == H256::zero()
+            return self.root == H256::zero();
         }
 
-        let sorted_leaves = self.store
+        let sorted_leaves = self
+            .store
             .sorted_leaves()
             .map(|(k, v)| (k, v.clone()))
             .collect::<Vec<_>>();
         // iterator over consecutive pairs of leaves
-        let pairs = sorted_leaves
-            .iter()
-            .tuple_windows::<(_, _)>();
+        let pairs = sorted_leaves.iter().tuple_windows::<(_, _)>();
 
         // construct a vector of nodes and distance to next node
         let mut leaves = Vec::with_capacity(self.store.size());
@@ -529,10 +544,7 @@ where
             let hash = hash_leaf::<H, K, V, N>(k1, v1);
             leaves.push((hash, height));
         }
-        let (last_k, last_v) = sorted_leaves
-            .last()
-            .map(|(k, v)| (k, v))
-            .unwrap();
+        let (last_k, last_v) = sorted_leaves.last().map(|(k, v)| (k, v)).unwrap();
         let last = hash_leaf::<H, K, V, N>(last_k, last_v);
         if leaves.is_empty() {
             return self.root == last;
